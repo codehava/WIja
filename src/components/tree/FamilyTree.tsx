@@ -24,8 +24,8 @@ export interface FamilyTreeProps {
 }
 
 // Layout constants
-const NODE_WIDTH = 200;
-const NODE_HEIGHT = 120;
+const NODE_WIDTH = 220;
+const NODE_HEIGHT = 130;
 
 interface NodePosition {
     x: number;
@@ -330,6 +330,23 @@ function calculateDagreLayout(persons: Person[]): Map<string, NodePosition> {
             }
         });
     });
+
+    // FINAL: Normalize positions so minimum X and Y are at least 50px from edge
+    // This ensures no nodes are positioned outside the visible canvas
+    let minX = Infinity, minY = Infinity;
+    posMap.forEach(pos => {
+        minX = Math.min(minX, pos.x);
+        minY = Math.min(minY, pos.y);
+    });
+
+    const offsetX = minX < 50 ? 50 - minX : 0;
+    const offsetY = minY < 50 ? 50 - minY : 0;
+
+    if (offsetX !== 0 || offsetY !== 0) {
+        posMap.forEach((pos, id) => {
+            posMap.set(id, { x: pos.x + offsetX, y: pos.y + offsetY });
+        });
+    }
 
     return posMap;
 }
@@ -982,12 +999,12 @@ export function FamilyTree({
                                     </div>
                                     <div className="flex-1 min-w-0 overflow-hidden">
                                         {(scriptMode === 'latin' || scriptMode === 'both') && (
-                                            <div className="text-sm font-semibold text-stone-800 leading-tight break-words line-clamp-2">
+                                            <div className="text-sm font-semibold text-stone-800 leading-tight break-words">
                                                 {displayName}
                                             </div>
                                         )}
                                         {(scriptMode === 'lontara' || scriptMode === 'both') && person.lontaraName && (
-                                            <div className="text-base text-teal-700 font-lontara leading-normal mt-1 break-words">
+                                            <div className="text-lg text-teal-700 font-lontara leading-relaxed mt-0.5">
                                                 {person.lontaraName.first}
                                             </div>
                                         )}

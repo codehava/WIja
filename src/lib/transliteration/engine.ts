@@ -90,7 +90,7 @@ function normalisasi(text: string): string {
     result = result.replace(/x/g, 'ks');
 
     // Konsonan ganda → tunggal (mm→m, ss→s, ll→l, dll)
-    result = result.replace(/(.)\\1+/g, '$1');
+    result = result.replace(/(.)\1+/g, '$1');
 
     return result;
 }
