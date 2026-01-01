@@ -1005,7 +1005,9 @@ export function FamilyTree({
                                         )}
                                         {(scriptMode === 'lontara' || scriptMode === 'both') && person.lontaraName && (
                                             <div className="text-lg text-teal-700 font-lontara leading-relaxed mt-0.5">
-                                                {person.lontaraName.first}
+                                                {[person.lontaraName.first, person.lontaraName.middle, person.lontaraName.last]
+                                                    .filter(Boolean)
+                                                    .join(' ')}
                                             </div>
                                         )}
                                     </div>
