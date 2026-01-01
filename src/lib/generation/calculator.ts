@@ -1,0 +1,190 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// WIJA - Dynamic Generation Calculator
+// Based on WIJA Blueprint v5.0
+// NO STORED GENERATION FIELD - Calculated at runtime using BFS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+import { Person } from '@/types';
+
+// ─────────────────────────────────────────────────────────────────────────────────
+// GENERATION LABELS (Indonesian)
+// ─────────────────────────────────────────────────────────────────────────────────
+
+const GENERATION_LABELS: Record<number, string> = {
+    1: 'Leluhur',
+    2: 'Anak',
+    3: 'Cucu',
+    4: 'Cicit',
+    5: 'Canggah',
+    6: 'Wareng',
+    7: 'Udeg-udeg',
+    8: 'Gantung Siwur'
+};
+
+// ─────────────────────────────────────────────────────────────────────────────────
+// CORE FUNCTIONS
+// ─────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Calculate generation at RUNTIME using BFS algorithm
+ * @param personId - ID of the person to calculate generation for
+ * @param rootId - ID of the root ancestor
+ * @param personsMap - Map of all persons (id -> Person)
+ * @returns Generation number (1-based), or -1 if not connected
+ */
+export function calculateGeneration(
+    personId: string,
+    rootId: string,
+    personsMap: Map<string, Person>
+): number {
+    if (!personId || !rootId || personsMap.size === 0) return -1;
+    if (personId === rootId) return 1;
+
+    const visited = new Set<string>();
+    const queue: Array<{ id: string; gen: number }> = [{ id: rootId, gen: 1 }];
+
+    while (queue.length > 0) {
+        const { id, gen } = queue.shift()!;
+
+        if (visited.has(id)) continue;
+        visited.add(id);
+
+        if (id === personId) return gen;
+
+        const person = personsMap.get(id);
+        if (!person) continue;
+
+        // Add children (next generation)
+        const childIds = person.relationships?.childIds || [];
+        for (const childId of childIds) {
+            if (!visited.has(childId)) {
+                queue.push({ id: childId, gen: gen + 1 });
+            }
+        }
+    }
+
+    return -1; // Not connected to root
+}
+
+/**
+ * Get generation label in Indonesian
+ * @param gen - Generation number
+ * @returns Indonesian label for the generation
+ */
+export function getGenerationLabel(gen: number): string {
+    if (gen < 1) return 'Tidak terhubung';
+    return GENERATION_LABELS[gen] || `Generasi ke-${gen}`;
+}
+
+/**
+ * Calculate generations for all persons in the tree
+ * @param persons - Array of all persons
+ * @param rootId - ID of the root ancestor
+ * @returns Map of personId -> generation number
+ */
+export function calculateAllGenerations(
+    persons: Person[],
+    rootId: string
+): Map<string, number> {
+    const personsMap = new Map<string, Person>();
+    persons.forEach(p => personsMap.set(p.personId, p));
+
+    const generations = new Map<string, number>();
+
+    for (const person of persons) {
+        const gen = calculateGeneration(person.personId, rootId, personsMap);
+        generations.set(person.personId, gen);
+    }
+
+    return generations;
+}
+
+/**
+ * Get the maximum generation depth in the tree
+ * @param persons - Array of all persons
+ * @param rootId - ID of the root ancestor
+ * @returns Maximum generation number
+ */
+export function getMaxGeneration(
+    persons: Person[],
+    rootId: string
+): number {
+    const generations = calculateAllGenerations(persons, rootId);
+    let maxGen = 0;
+
+    for (const gen of generations.values()) {
+        if (gen > maxGen) maxGen = gen;
+    }
+
+    return maxGen;
+}
+
+/**
+ * Get persons grouped by generation
+ * @param persons - Array of all persons
+ * @param rootId - ID of the root ancestor
+ * @returns Object with generation numbers as keys and arrays of persons as values
+ */
+export function groupByGeneration(
+    persons: Person[],
+    rootId: string
+): Record<number, Person[]> {
+    const personsMap = new Map<string, Person>();
+    persons.forEach(p => personsMap.set(p.personId, p));
+
+    const groups: Record<number, Person[]> = {};
+
+    for (const person of persons) {
+        const gen = calculateGeneration(person.personId, rootId, personsMap);
+        if (gen === -1) continue;
+
+        if (!groups[gen]) {
+            groups[gen] = [];
+        }
+        groups[gen].push(person);
+    }
+
+    return groups;
+}
+
+/**
+ * Find the root ancestor from a list of persons
+ * @param persons - Array of all persons
+ * @returns Root ancestor person, or undefined
+ */
+export function findRootAncestor(persons: Person[]): Person | undefined {
+    return persons.find(p => p.isRootAncestor);
+}
+
+/**
+ * Get generation statistics
+ * @param persons - Array of all persons
+ * @param rootId - ID of the root ancestor
+ * @returns Statistics about generations
+ */
+export function getGenerationStats(
+    persons: Person[],
+    rootId: string
+): {
+    totalGenerations: number;
+    personsByGeneration: Record<number, number>;
+    disconnectedCount: number;
+} {
+    const groups = groupByGeneration(persons, rootId);
+    const generations = Object.keys(groups).map(Number);
+
+    const personsByGeneration: Record<number, number> = {};
+    for (const [gen, personList] of Object.entries(groups)) {
+        personsByGeneration[Number(gen)] = personList.length;
+    }
+
+    // Count disconnected persons
+    const connectedCount = Object.values(groups).flat().length;
+    const disconnectedCount = persons.length - connectedCount;
+
+    return {
+        totalGenerations: generations.length > 0 ? Math.max(...generations) : 0,
+        personsByGeneration,
+        disconnectedCount
+    };
+}
