@@ -63,14 +63,18 @@ export function useHasRole(familyId: string | null, roles: MemberRole[]) {
  * Hook to check if user can edit in a family
  */
 export function useCanEdit(familyId: string | null) {
-    return useHasRole(familyId, ['owner', 'admin', 'editor']);
+    const { hasRole, loading: roleLoading } = useHasRole(familyId, ['owner', 'admin', 'editor']);
+    const { isSuperAdmin, loading: superLoading } = useIsSuperAdmin();
+    return { hasRole: hasRole || isSuperAdmin, loading: roleLoading || superLoading };
 }
 
 /**
  * Hook to check if user is admin or owner
  */
 export function useIsAdmin(familyId: string | null) {
-    return useHasRole(familyId, ['owner', 'admin']);
+    const { hasRole, loading: roleLoading } = useHasRole(familyId, ['owner', 'admin']);
+    const { isSuperAdmin, loading: superLoading } = useIsSuperAdmin();
+    return { hasRole: hasRole || isSuperAdmin, loading: roleLoading || superLoading };
 }
 
 /**
