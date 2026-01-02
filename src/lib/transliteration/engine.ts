@@ -363,8 +363,8 @@ export function getLontaraReference() {
 export function transliterateName(latinName: { first: string; middle?: string; last: string }) {
     return {
         first: transliterateLatin(latinName.first).lontara,
-        middle: latinName.middle ? transliterateLatin(latinName.middle).lontara : undefined,
-        last: transliterateLatin(latinName.last).lontara
+        middle: latinName.middle ? transliterateLatin(latinName.middle).lontara : '',
+        last: transliterateLatin(latinName.last).lontara || ''
     };
 }
 

@@ -36,6 +36,7 @@ const DEFAULT_FORM_STATE: Partial<CreatePersonInput> = {
     gender: 'male' as Gender,
     birthDate: '',
     birthPlace: '',
+    birthOrder: undefined,
     deathDate: '',
     deathPlace: '',
     isLiving: true,
@@ -112,6 +113,7 @@ export function PersonForm({
             gender: formData.gender as Gender,
             birthDate: formData.birthDate,
             birthPlace: formData.birthPlace,
+            birthOrder: formData.birthOrder,
             deathDate: formData.deathDate,
             deathPlace: formData.deathPlace,
             isLiving: formData.isLiving ?? true,
@@ -175,7 +177,7 @@ export function PersonForm({
                     />
 
                     {/* Birth Info */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <Input
                             label="Tanggal Lahir"
                             type="date"
@@ -187,6 +189,14 @@ export function PersonForm({
                             value={formData.birthPlace || ''}
                             onChange={(e) => handleChange('birthPlace', e.target.value)}
                             placeholder="Kota/Daerah"
+                        />
+                        <Input
+                            label="Anak ke-"
+                            type="number"
+                            min="1"
+                            value={formData.birthOrder || ''}
+                            onChange={(e) => handleChange('birthOrder', e.target.value ? parseInt(e.target.value) : undefined)}
+                            placeholder="1, 2, 3..."
                         />
                     </div>
 

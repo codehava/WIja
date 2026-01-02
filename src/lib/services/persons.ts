@@ -120,6 +120,7 @@ export async function createPerson(
     if (input.lastName) personData.lastName = input.lastName;
     if (input.birthDate) personData.birthDate = input.birthDate;
     if (input.birthPlace) personData.birthPlace = input.birthPlace;
+    if (input.birthOrder) personData.birthOrder = input.birthOrder;
     if (input.deathDate) personData.deathDate = input.deathDate;
     if (input.deathPlace) personData.deathPlace = input.deathPlace;
     if (input.occupation) personData.occupation = input.occupation;
@@ -265,6 +266,7 @@ export async function updatePerson(
     if (updates.gender !== undefined) updateData.gender = updates.gender;
     if (updates.birthDate !== undefined) updateData.birthDate = updates.birthDate || null;
     if (updates.birthPlace !== undefined) updateData.birthPlace = updates.birthPlace || null;
+    if (updates.birthOrder !== undefined) updateData.birthOrder = updates.birthOrder || null;
     if (updates.deathDate !== undefined) updateData.deathDate = updates.deathDate || null;
     if (updates.deathPlace !== undefined) updateData.deathPlace = updates.deathPlace || null;
     if (updates.isLiving !== undefined) updateData.isLiving = updates.isLiving;
@@ -282,8 +284,8 @@ export async function updatePerson(
                 last: updates.lastName ?? person.lastName ?? ''
             };
 
-            updateData.latinName = latinName;
-            updateData.lontaraName = transliterateName(latinName);
+            updateData.latinName = removeUndefined(latinName);
+            updateData.lontaraName = removeUndefined(transliterateName(latinName));
             updateData.fullName = [latinName.first, latinName.middle, latinName.last]
                 .filter(Boolean)
                 .join(' ');
@@ -451,6 +453,7 @@ export async function addSpouse(
 
 /**
  * Add parent-child relationship (bidirectional)
+ * AUTO-LINKS child to both parents if parent has a spouse
  */
 export async function addParentChild(
     familyId: string,
@@ -474,6 +477,30 @@ export async function addParentChild(
         await updateDoc(getPersonRef(familyId, childId), {
             'relationships.parentIds': [...child.relationships.parentIds, parentId]
         });
+    }
+
+    // AUTO-LINK: Also connect child to parent's spouse (the other parent)
+    for (const spouseId of parent.relationships.spouseIds) {
+        const spouse = await getPerson(familyId, spouseId);
+        if (!spouse) continue;
+
+        // Add child to spouse's children if not already there
+        if (!spouse.relationships.childIds.includes(childId)) {
+            await updateDoc(getPersonRef(familyId, spouseId), {
+                'relationships.childIds': [...spouse.relationships.childIds, childId]
+            });
+        }
+
+        // Refetch child to get updated parentIds
+        const updatedChild = await getPerson(familyId, childId);
+        if (!updatedChild) continue;
+
+        // Add spouse to child's parents if not already there and has room (max 2)
+        if (!updatedChild.relationships.parentIds.includes(spouseId) && updatedChild.relationships.parentIds.length < 2) {
+            await updateDoc(getPersonRef(familyId, childId), {
+                'relationships.parentIds': [...updatedChild.relationships.parentIds, spouseId]
+            });
+        }
     }
 }
 

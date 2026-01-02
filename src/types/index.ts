@@ -110,6 +110,7 @@ export interface Person {
     gender: Gender;
     birthDate?: string;            // YYYY-MM-DD
     birthPlace?: string;
+    birthOrder?: number;           // Anak ke-XX (1, 2, 3...)
     deathDate?: string;
     deathPlace?: string;
     isLiving: boolean;
@@ -345,6 +346,7 @@ export interface CreatePersonInput {
     gender: Gender;
     birthDate?: string;
     birthPlace?: string;
+    birthOrder?: number;           // Anak ke-XX (1, 2, 3...)
     deathDate?: string;
     deathPlace?: string;
     isLiving: boolean;

@@ -129,13 +129,49 @@ export function calculateTreeLayout(persons: Person[], collapsedIds: Set<string>
         }
     });
 
-    // Add Edges
+    // --- Helper: Sort children by birthDate or birthOrder (eldest first = left) ---
+    const sortChildIds = (childIds: string[]): string[] => {
+        return [...childIds].sort((a, b) => {
+            const childA = personsMap.get(a);
+            const childB = personsMap.get(b);
+            if (!childA || !childB) return 0;
+
+            // First priority: birthDate (earliest first)
+            const dateA = childA.birthDate ? new Date(childA.birthDate).getTime() : Infinity;
+            const dateB = childB.birthDate ? new Date(childB.birthDate).getTime() : Infinity;
+            if (dateA !== Infinity && dateB !== Infinity && dateA !== dateB) {
+                return dateA - dateB; // Earlier date first (elder left)
+            }
+
+            // Second priority: birthOrder (lower number first)
+            const orderA = childA.birthOrder ?? Infinity;
+            const orderB = childB.birthOrder ?? Infinity;
+            if (orderA !== Infinity && orderB !== Infinity && orderA !== orderB) {
+                return orderA - orderB; // Lower order first (elder left)
+            }
+
+            // If one has date and other doesn't, dated one comes first
+            if (dateA !== Infinity && dateB === Infinity) return -1;
+            if (dateB !== Infinity && dateA === Infinity) return 1;
+
+            // If one has birthOrder and other doesn't, ordered one comes first
+            if (orderA !== Infinity && orderB === Infinity) return -1;
+            if (orderB !== Infinity && orderA === Infinity) return 1;
+
+            return 0; // Keep original order
+        });
+    };
+
+    // Add Edges (children in sorted order for proper left-to-right placement)
     const addedEdges = new Set<string>();
     visiblePersons.forEach(person => {
         const sourceCluster = personToCluster.get(person.personId);
         if (!sourceCluster || !clustersInGraph.has(sourceCluster)) return;
 
-        person.relationships.childIds.forEach(childId => {
+        // Sort children before adding edges (elder left, younger right)
+        const sortedChildIds = sortChildIds(person.relationships.childIds);
+
+        sortedChildIds.forEach(childId => {
             if (!visibleIds.has(childId)) return;
             const targetCluster = personToCluster.get(childId);
             if (!targetCluster || !clustersInGraph.has(targetCluster)) return;
@@ -264,6 +300,94 @@ export function calculateTreeLayout(persons: Person[], collapsedIds: Set<string>
                     }
                 }
             });
+        });
+    });
+
+    // --- 6.5. SIBLING REORDERING POST-PROCESSING ---
+    // Sort child clusters by birthDate/birthOrder (eldest left, youngest right)
+    // Group children by their common parent cluster, then reassign X positions
+
+    const processedParentClusters = new Set<string>();
+
+    visiblePersons.forEach(person => {
+        const parentClusterId = personToCluster.get(person.personId);
+        if (!parentClusterId || !clustersInGraph.has(parentClusterId)) return;
+        if (processedParentClusters.has(parentClusterId)) return;
+        processedParentClusters.add(parentClusterId);
+
+        // Get all visible children of this parent cluster
+        const childClusterIds: string[] = [];
+        const parentCluster = clusters.get(parentClusterId);
+        if (!parentCluster) return;
+
+        parentCluster.members.forEach(member => {
+            member.relationships.childIds.forEach(childId => {
+                if (!visibleIds.has(childId)) return;
+                const childClusterId = personToCluster.get(childId);
+                if (childClusterId && clustersInGraph.has(childClusterId) && !childClusterIds.includes(childClusterId)) {
+                    childClusterIds.push(childClusterId);
+                }
+            });
+        });
+
+        if (childClusterIds.length < 2) return; // No need to reorder single child
+
+        // Get current X positions of child clusters
+        const childPositions = childClusterIds.map(id => ({
+            clusterId: id,
+            x: clusterPositions.get(id)?.x ?? 0
+        }));
+
+        // Get the actual X positions in sorted order (for reassignment)
+        const sortedXPositions = [...childPositions].sort((a, b) => a.x - b.x).map(p => p.x);
+
+        // Sort child clusters by birthDate/birthOrder  
+        const sortedChildren = [...childClusterIds].sort((a, b) => {
+            // Get representative person from each cluster (prioritize by birthDate/birthOrder)
+            const clusterA = clusters.get(a);
+            const clusterB = clusters.get(b);
+            if (!clusterA || !clusterB) return 0;
+
+            // Get the child members from these clusters
+            const childA = clusterA.members.find(m =>
+                parentCluster.members.some(p => p.relationships.childIds.includes(m.personId))
+            );
+            const childB = clusterB.members.find(m =>
+                parentCluster.members.some(p => p.relationships.childIds.includes(m.personId))
+            );
+
+            if (!childA || !childB) return 0;
+
+            // First priority: birthDate
+            const dateA = childA.birthDate ? new Date(childA.birthDate).getTime() : Infinity;
+            const dateB = childB.birthDate ? new Date(childB.birthDate).getTime() : Infinity;
+            if (dateA !== Infinity && dateB !== Infinity && dateA !== dateB) {
+                return dateA - dateB; // Earlier date first (elder left)
+            }
+
+            // Second priority: birthOrder
+            const orderA = childA.birthOrder ?? Infinity;
+            const orderB = childB.birthOrder ?? Infinity;
+            if (orderA !== Infinity && orderB !== Infinity && orderA !== orderB) {
+                return orderA - orderB; // Lower order first (elder left)
+            }
+
+            // If one has data and other doesn't
+            if (dateA !== Infinity && dateB === Infinity) return -1;
+            if (dateB !== Infinity && dateA === Infinity) return 1;
+            if (orderA !== Infinity && orderB === Infinity) return -1;
+            if (orderB !== Infinity && orderA === Infinity) return 1;
+
+            return 0;
+        });
+
+        // Reassign X positions: eldest gets leftmost position, youngest gets rightmost
+        sortedChildren.forEach((clusterId, index) => {
+            const pos = clusterPositions.get(clusterId);
+            if (pos) {
+                pos.x = sortedXPositions[index];
+                clusterPositions.set(clusterId, pos);
+            }
         });
     });
 

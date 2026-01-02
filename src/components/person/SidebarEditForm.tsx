@@ -32,6 +32,7 @@ const DEFAULT_FORM_STATE: Partial<CreatePersonInput> = {
     gender: 'male' as Gender,
     birthDate: '',
     birthPlace: '',
+    birthOrder: undefined,
     deathDate: '',
     deathPlace: '',
     isLiving: true,
@@ -98,6 +99,7 @@ export function SidebarEditForm({
             gender: formData.gender as Gender,
             birthDate: formData.birthDate,
             birthPlace: formData.birthPlace,
+            birthOrder: formData.birthOrder,
             deathDate: formData.deathDate,
             deathPlace: formData.deathPlace,
             isLiving: formData.isLiving ?? true,
@@ -153,7 +155,7 @@ export function SidebarEditForm({
             />
 
             {/* Birth Info */}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
                 <Input
                     label="Tanggal Lahir"
                     type="date"
@@ -165,6 +167,14 @@ export function SidebarEditForm({
                     value={formData.birthPlace || ''}
                     onChange={(e) => handleChange('birthPlace', e.target.value)}
                     placeholder="Kota"
+                />
+                <Input
+                    label="Anak ke-"
+                    type="number"
+                    min="1"
+                    value={formData.birthOrder || ''}
+                    onChange={(e) => handleChange('birthOrder', e.target.value ? parseInt(e.target.value) : undefined)}
+                    placeholder="1, 2, 3..."
                 />
             </div>
 
