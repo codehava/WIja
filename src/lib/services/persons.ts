@@ -524,3 +524,39 @@ export async function removeParentChild(
         });
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────────
+// REGENERATE LONTARA NAMES
+// ─────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Regenerate Lontara names for all persons in a family
+ * Uses the latest transliteration engine
+ * @returns Number of persons updated
+ */
+export async function regenerateAllLontaraNames(familyId: string): Promise<number> {
+    const persons = await getAllPersons(familyId);
+    let updatedCount = 0;
+
+    for (const person of persons) {
+        // Build latin name from existing data
+        const latinName: LatinName = {
+            first: person.latinName?.first || person.firstName || '',
+            middle: person.latinName?.middle || '',
+            last: person.latinName?.last || ''
+        };
+
+        // Re-transliterate using latest engine
+        const newLontaraName = transliterateName(latinName);
+
+        // Update in database
+        await updateDoc(getPersonRef(familyId, person.personId), {
+            lontaraName: removeUndefined(newLontaraName),
+            updatedAt: serverTimestamp()
+        });
+
+        updatedCount++;
+    }
+
+    return updatedCount;
+}

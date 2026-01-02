@@ -237,7 +237,7 @@ function calculateDagreLayout(persons: Person[]): Map<string, NodePosition> {
 
     // Post-process: Resolve collisions - ensure no overlapping nodes
     const resolveCollisions = () => {
-        const padding = 15; // Minimum gap between nodes
+        const padding = 30; // Minimum gap between nodes (increased from 15)
         const allNodes = Array.from(posMap.entries()).map(([id, pos]) => ({
             id,
             x: pos.x,
@@ -274,7 +274,7 @@ function calculateDagreLayout(persons: Person[]): Map<string, NodePosition> {
     };
 
     // Run collision resolution multiple times to handle cascading shifts
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 5; i++) {
         resolveCollisions();
     }
 

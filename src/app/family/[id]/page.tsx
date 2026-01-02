@@ -9,10 +9,10 @@ import { useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useFamilyTree } from '@/hooks/useFirestore';
-import { useCanEdit, useIsAdmin } from '@/hooks/useAuth';
+import { useCanEdit, useIsAdmin, useIsSuperAdmin } from '@/hooks/useAuth';
 import { useAuth } from '@/contexts/AuthContext';
 import { Person, ScriptMode, CreatePersonInput, CreateRelationshipInput } from '@/types';
-import { createPerson, updatePerson, deletePerson, removeSpouse, removeParentChild } from '@/lib/services/persons';
+import { createPerson, updatePerson, deletePerson, removeSpouse, removeParentChild, regenerateAllLontaraNames } from '@/lib/services/persons';
 import { createRelationship } from '@/lib/services/relationships';
 import { FamilyTree } from '@/components/tree/FamilyTree';
 import { PersonCard } from '@/components/person/PersonCard';
@@ -30,6 +30,7 @@ export default function FamilyPage() {
     const { user } = useAuth();
     const { hasRole: canEdit } = useCanEdit(familyId);
     const { hasRole: isAdmin } = useIsAdmin(familyId);
+    const { isSuperAdmin } = useIsSuperAdmin();
     const {
         family,
         persons,
@@ -47,6 +48,7 @@ export default function FamilyPage() {
     const [scriptMode, setScriptMode] = useState<ScriptMode>('both');
     const [formLoading, setFormLoading] = useState(false);
     const [editingPerson, setEditingPerson] = useState<Person | null>(null);
+    const [regenerating, setRegenerating] = useState(false);
 
     // Relationship form state
     const [relationType, setRelationType] = useState<'spouse' | 'parent' | 'child'>('spouse');
@@ -57,6 +59,22 @@ export default function FamilyPage() {
         setEditingPerson(null);
         setShowPersonForm(true);
     }, []);
+
+    // Handle regenerate Lontara (Super Admin only)
+    const handleRegenerateLontara = useCallback(async () => {
+        if (!isSuperAdmin) return;
+
+        setRegenerating(true);
+        try {
+            const count = await regenerateAllLontaraNames(familyId);
+            alert(`✅ Berhasil regenerate ${count} nama Lontara!`);
+        } catch (err) {
+            console.error('Failed to regenerate Lontara:', err);
+            alert('❌ Gagal regenerate Lontara');
+        } finally {
+            setRegenerating(false);
+        }
+    }, [familyId, isSuperAdmin]);
 
     // Handle edit person
     const handleEditPerson = useCallback((person: Person) => {
@@ -294,6 +312,15 @@ export default function FamilyPage() {
                                     >
                                         ⚙️ Pengaturan
                                     </Link>
+                                    {isSuperAdmin && (
+                                        <button
+                                            onClick={handleRegenerateLontara}
+                                            disabled={regenerating}
+                                            className="px-3 py-1.5 bg-yellow-500/80 hover:bg-yellow-500 disabled:bg-yellow-500/50 rounded-lg text-sm font-medium transition flex items-center gap-1"
+                                        >
+                                            {regenerating ? '⏳ Regenerating...' : '🔄 Regenerate Lontara'}
+                                        </button>
+                                    )}
                                 </div>
                             )}
                         </div>
