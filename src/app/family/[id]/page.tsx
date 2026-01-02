@@ -297,8 +297,8 @@ export default function FamilyPage() {
                                 <span>🌳 {stats.totalGenerations} generasi</span>
                             </div>
 
-                            {/* Admin Menu */}
-                            {isAdmin && (
+                            {/* Admin Menu - visible for admin OR super admin */}
+                            {(isAdmin || isSuperAdmin) && (
                                 <div className="flex items-center gap-2">
                                     <Link
                                         href={`/family/${familyId}/team`}
