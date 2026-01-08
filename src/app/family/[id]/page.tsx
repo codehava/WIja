@@ -286,9 +286,9 @@ export default function FamilyPage() {
     const availablePersons = getAvailablePersons();
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-100 via-teal-50 to-cyan-50">
-            {/* Header */}
-            <header className="bg-gradient-to-r from-teal-600 via-cyan-600 to-teal-700 text-white shadow-xl">
+        <div className="h-screen overflow-hidden bg-gradient-to-br from-slate-100 via-teal-50 to-cyan-50">
+            {/* Header - Fixed */}
+            <header className="sticky top-0 z-50 bg-gradient-to-r from-teal-600 via-cyan-600 to-teal-700 text-white shadow-xl">
                 <div className="max-w-full px-4 py-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
