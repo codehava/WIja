@@ -601,7 +601,7 @@ export default function FamilyPage() {
                     />
 
                     {/* Marriage Order - only for spouse relationships */}
-                    {relationType === 'spouse' && selectedPerson?.relationships.spouseIds.length > 0 && (
+                    {relationType === 'spouse' && selectedPerson && selectedPerson.relationships.spouseIds.length > 0 && (
                         <Select
                             label="Urutan Istri (untuk poligami)"
                             value={marriageOrder.toString()}
