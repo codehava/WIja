@@ -30,8 +30,9 @@ export function PersonNode({
     showDetails = true,
     compact = false
 }: PersonNodeProps) {
-    // Get display name
-    const displayName = person.fullName || person.firstName;
+    // Get display name - build from components
+    const displayName = [person.firstName, person.middleName, person.lastName]
+        .filter(Boolean).join(' ') || person.fullName || person.firstName;
 
     // Auto-transliterate full name for Lontara display
     const lontaraName = useMemo(() => {
