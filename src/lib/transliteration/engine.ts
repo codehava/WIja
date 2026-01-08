@@ -92,10 +92,15 @@ const PEPET_PREFIX = new Set(['se', 'be', 'de', 'ke', 'te', 'pe', 'me', 're', 'l
 
 // Konsonan akhir yang diabaikan (sesuai standar Lontara Bugis)
 // Hanya konsonan yang TIDAK dilafalkan di akhir kata dalam bahasa Bugis
-const SKIP_AKHIR = new Set(['n', 'm', 'k', 't', 'p', 'h', 'l', 'd', 'b', 'g']);
+const SKIP_AKHIR = new Set(['n', 'm', 'k', 't', 'p', 'h', 'd', 'b', 'g']);
 
-// Konsonan akhir yang dapat vokal /a/ (standar)
-const VOKAL_AKHIR = new Set(['r', 's']);
+// Konsonan akhir yang dapat vokal /e/ (sesuai dialek Bugis)
+// r dan l di akhir kata mendapat vokal /e/: Kahar→Kahare, Khairul→Khairule
+const VOKAL_AKHIR_E = new Set(['r', 'l']);
+
+// Konsonan akhir yang dapat vokal harmoni (s mengikuti vokal sebelumnya)
+// Yunus→Yunusu, Aris→Arisi
+const VOKAL_AKHIR_HARMONI = new Set(['s']);
 
 // ─────────────────────────────────────────────────────────────────────────────────
 // HELPER FUNCTIONS
@@ -352,9 +357,20 @@ export function transliterateLatin(text: string): TransliterationResult {
                     continue;
                 }
 
-                // Konsonan yang dapat vokal harmoni di akhir kata (r, s)
+                // Konsonan r/l yang dapat vokal /e/ di akhir kata
+                // Kahar → Kahare, Khairul → Khairule
+                if (VOKAL_AKHIR_E.has(konsonan)) {
+                    const aksara = KONSONAN[konsonan];
+                    const lontara = aksara + getVokalDiakritik('e');  // Fixed /e/ vowel
+                    result += lontara;
+                    details.push({ latin: konsonan + 'e', lontara: lontara, type: 'consonant', note: `${konsonan} akhir dapat /e/` });
+                    i++;
+                    continue;
+                }
+
+                // Konsonan s yang dapat vokal harmoni di akhir kata
                 // Mengikuti vokal suku kata sebelumnya: Yunus → Yunusu, Aris → Arisi
-                if (VOKAL_AKHIR.has(konsonan)) {
+                if (VOKAL_AKHIR_HARMONI.has(konsonan)) {
                     const aksara = KONSONAN[konsonan];
                     const harmonicVowel = lastVowel;  // Use last vowel for harmony
                     const lontara = aksara + getVokalDiakritik(harmonicVowel);
