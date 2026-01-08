@@ -24,10 +24,13 @@ const NASAL: Record<string, string> = {
     'ny': 'ᨎ',  // U+1A0E - nya
 };
 
-// Aksara Pranasal (hanya untuk kluster + vokal)
+// Aksara Pranasal (untuk kluster prenasal + vokal)
+// 4 aksara pranasal khusus dalam bahasa Bugis
 const PRANASAL: Record<string, string> = {
     'ngk': 'ᨃ', // U+1A03 - ngka
     'nk': 'ᨃ',  // nk juga → ngka
+    'mp': 'ᨇ',  // U+1A07 - mpa (BARU)
+    'nr': 'ᨋ',  // U+1A0B - nra (BARU)
     'nc': 'ᨏ',  // U+1A0F - nca
     'nj': 'ᨏ',  // nj juga → nca
 };
@@ -62,7 +65,8 @@ const VOKAL_SET = new Set(['a', 'i', 'u', 'e', 'é', 'o', 'ə']);
 const KONSONAN_SET = new Set(Object.keys(KONSONAN));
 
 // Kluster yang konsonan pertama DIABAIKAN (v3)
-const SKIP_CLUSTER = new Set(['mb', 'mp', 'nt', 'nd', 'nr', 'rm', 'bt']);
+// NOTE: mp dan nr dihapus karena sekarang menggunakan aksara pranasal ᨇ dan ᨋ
+const SKIP_CLUSTER = new Set(['mb', 'nt', 'nd', 'rm', 'bt']);
 
 // Kluster yang konsonan pertama dapat vokal /a/ (v3)
 const VOKAL_A_CLUSTER = new Set(['lt', 'bd']);
