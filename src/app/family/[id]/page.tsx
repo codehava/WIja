@@ -438,9 +438,29 @@ export default function FamilyPage() {
                                         <div className="text-xs text-stone-500 mb-1">💍 Pasangan</div>
                                         {selectedPerson.relationships.spouseIds.map(id => {
                                             const spouse = persons.find(p => p.personId === id);
+                                            // Find the relationship to get marriage order
+                                            const rel = relationships.find(r =>
+                                                r.type === 'spouse' &&
+                                                ((r.person1Id === selectedPerson.personId && r.person2Id === id) ||
+                                                    (r.person1Id === id && r.person2Id === selectedPerson.personId))
+                                            );
+                                            const marriageOrderNum = rel?.marriage?.marriageOrder;
+
                                             return spouse ? (
                                                 <div key={id} className="flex items-center justify-between pl-4 py-1 hover:bg-stone-50 rounded">
-                                                    <span className="text-sm text-stone-700">{spouse.fullName}</span>
+                                                    <div className="flex-1">
+                                                        <span className="text-sm text-stone-700">{spouse.fullName}</span>
+                                                        {marriageOrderNum && marriageOrderNum > 1 && (
+                                                            <span className="ml-2 text-xs text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded">
+                                                                Istri ke-{marriageOrderNum}
+                                                            </span>
+                                                        )}
+                                                        {marriageOrderNum === 1 && selectedPerson.relationships.spouseIds.length > 1 && (
+                                                            <span className="ml-2 text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                                                                Istri ke-1
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     {canEdit && (
                                                         <button
                                                             onClick={() => handleRemoveRelationship('spouse', id)}

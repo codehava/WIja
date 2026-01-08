@@ -545,7 +545,9 @@ export function FamilyTree({
 
                 const nodeClass = person.gender === 'female' ? 'node-female' :
                     person.gender === 'male' ? 'node-male' : 'node-other';
-                const displayName = person.fullName || person.firstName;
+                // Build full name from components
+                const displayName = [person.firstName, person.middleName, person.lastName]
+                    .filter(Boolean).join(' ') || person.fullName || person.firstName;
                 const rx = 12; // Rounded corners
 
                 // Node rectangle
@@ -848,7 +850,9 @@ export function FamilyTree({
                             unknown: { bg: 'bg-gradient-to-br from-gray-50 to-gray-100', border: 'border-gray-400', icon: '👤', accent: 'bg-gray-500' }
                         };
                         const style = genderStyles[person.gender] || genderStyles.unknown;
-                        const displayName = person.fullName || person.firstName;
+                        // Build full name from components
+                        const displayName = [person.firstName, person.middleName, person.lastName]
+                            .filter(Boolean).join(' ') || person.fullName || person.firstName;
                         const isSelected = person.personId === selectedPersonId;
                         const isDragging = draggingNode === person.personId;
 
