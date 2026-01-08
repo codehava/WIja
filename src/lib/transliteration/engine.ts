@@ -37,7 +37,8 @@ const DIAKRITIK: Record<string, string> = {
     'a': '',    // Vokal inheren
     'i': 'ᨗ',   // U+1A17
     'u': 'ᨘ',   // U+1A18
-    'e': 'ᨙ',   // U+1A19
+    'e': 'ᨙ',   // U+1A19 - e taling
+    'é': 'ᨙ',   // U+1A19 - e taling eksplisit (user input)
     'o': 'ᨚ',   // U+1A1A
     'ə': 'ᨛ',   // U+1A1B - pepet
 };
@@ -53,10 +54,11 @@ const AKSARA_A = 'ᨕ'; // U+1A15
 // Tanda baca
 const PUNCTUATION: Record<string, string> = {
     '.': '᨞', ',': '᨟', ' ': ' ',
+    "'": 'ᨕ',  // Glottal stop (hamzah) → aksara A (sebagai pemisah)
 };
 
 // Set untuk pengecekan
-const VOKAL_SET = new Set(['a', 'i', 'u', 'e', 'o', 'ə']);
+const VOKAL_SET = new Set(['a', 'i', 'u', 'e', 'é', 'o', 'ə']);
 const KONSONAN_SET = new Set(Object.keys(KONSONAN));
 
 // Kluster yang konsonan pertama DIABAIKAN (v3)
@@ -83,13 +85,16 @@ const PEPET_CLUSTER = new Set([
 ]);
 
 // Prefiks nama yang 'e'-nya adalah pepet (ə) jika diikuti konsonan
+// HANYA berlaku di AWAL KATA untuk menghindari over-detection
 // Contoh: Sekanyili, Belajar, Temanggung, Keluarga, Pemalang
-const PEPET_PREFIX = new Set(['se', 'be', 'de', 'ke', 'te', 'pe', 'ge', 'le', 'me', 'ne', 're', 'we']);
+// NOTE: 'de' dihapus karena Dewa/Dewi menggunakan e-taling
+const PEPET_PREFIX = new Set(['se', 'be', 'ke', 'te', 'pe']);
 
-// Konsonan akhir yang diabaikan (v3 - expanded list)
-const SKIP_AKHIR = new Set(['n', 'm', 'l', 'd', 't', 'k', 'b', 'p', 'g', 'h', 'c', 'j', 'w', 'y']);
+// Konsonan akhir yang diabaikan (sesuai standar Lontara Bugis)
+// Hanya konsonan yang TIDAK dilafalkan di akhir kata dalam bahasa Bugis
+const SKIP_AKHIR = new Set(['n', 'm', 'k', 't', 'p', 'h', 'l', 'd', 'b', 'g']);
 
-// Konsonan akhir yang dapat vokal /a/ (v3)
+// Konsonan akhir yang dapat vokal /a/ (standar)
 const VOKAL_AKHIR = new Set(['r', 's']);
 
 // ─────────────────────────────────────────────────────────────────────────────────
@@ -99,16 +104,29 @@ const VOKAL_AKHIR = new Set(['r', 's']);
 function normalisasi(text: string): string {
     let result = text.toLowerCase();
 
+    // Pertahankan é (e-taling eksplisit) - konversi ke marker sementara
+    result = result.replace(/é/g, 'E_TALING');
+
+    // Pertahankan glottal stop/hamzah
+    // ' di tengah kata tetap dipertahankan untuk diproses
+
     // Substitusi huruf asing
     for (const [asing, pengganti] of Object.entries(SUBSTITUSI)) {
         result = result.replace(new RegExp(asing, 'g'), pengganti);
     }
+
+    // Kluster Arab: sy → s, kh → k (simplifikasi standar)
+    result = result.replace(/sy/g, 's');
+    result = result.replace(/kh/g, 'k');
 
     // X → KS
     result = result.replace(/x/g, 'ks');
 
     // Konsonan ganda → tunggal (mm→m, ss→s, ll→l, dll)
     result = result.replace(/(.)\1+/g, '$1');
+
+    // Kembalikan marker e-taling
+    result = result.replace(/E_TALING/g, 'é');
 
     return result;
 }
@@ -295,12 +313,13 @@ export function transliterateLatin(text: string): TransliterationResult {
             // 9a. Diikuti vokal → konsonan + diakritik
             if (isVokal(nextChar)) {
                 // Special case: Auto-detect pepet for prefixes like Se-, Be-, De-, etc.
-                // If pattern is [consonant] + 'e' + [consonant], use pepet (ə) instead of e
+                // ONLY at word start (i==0 or after space) to avoid over-detection
                 const twoCharPrefix = konsonan + nextChar;
                 const afterVowel = charAfter(2);
+                const isAtWordStart = i === 0 || input[i - 1] === ' ';
 
-                if (nextChar === 'e' && PEPET_PREFIX.has(twoCharPrefix) && isKonsonan(afterVowel)) {
-                    // Use pepet for this 'e' since it's followed by consonant
+                if (nextChar === 'e' && isAtWordStart && PEPET_PREFIX.has(twoCharPrefix) && isKonsonan(afterVowel)) {
+                    // Use pepet for this 'e' since it's at word start + followed by consonant
                     const aksara = KONSONAN[konsonan];
                     const lontara = aksara + getVokalDiakritik('ə');
                     result += lontara;
