@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useFamilyTree } from '@/hooks/useFirestore';
@@ -13,6 +13,7 @@ import { useCanEdit, useIsAdmin, useIsSuperAdmin } from '@/hooks/useAuth';
 import { useAuth } from '@/contexts/AuthContext';
 import { Person, ScriptMode, CreatePersonInput, CreateRelationshipInput } from '@/types';
 import { createPerson, updatePerson, deletePerson, removeSpouse, removeParentChild, regenerateAllLontaraNames, updatePersonPosition, updateAllPersonPositions } from '@/lib/services/persons';
+import { uploadPersonPhoto, deletePersonPhoto } from '@/lib/services/photos';
 import { createRelationship } from '@/lib/services/relationships';
 import { FamilyTree } from '@/components/tree/FamilyTree';
 import { PersonCard } from '@/components/person/PersonCard';
@@ -57,6 +58,10 @@ export default function FamilyPage() {
     const [relationType, setRelationType] = useState<'spouse' | 'parent' | 'child'>('spouse');
     const [targetPersonId, setTargetPersonId] = useState<string>('');
     const [marriageOrder, setMarriageOrder] = useState<number>(1);
+
+    // Photo upload state for sidebar
+    const [sidebarPhotoUploading, setSidebarPhotoUploading] = useState(false);
+    const sidebarPhotoInputRef = useRef<HTMLInputElement>(null);
 
     // Handle add person
     const handleAddPerson = useCallback(() => {
@@ -251,6 +256,41 @@ export default function FamilyPage() {
         }
     }, [familyId]);
 
+    // Handle sidebar photo upload
+    const handleSidebarPhotoUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !user || !selectedPerson) return;
+
+        setSidebarPhotoUploading(true);
+        try {
+            const photoUrl = await uploadPersonPhoto(familyId, selectedPerson.personId, file);
+            await updatePerson(familyId, selectedPerson.personId, { photoUrl } as any, user.uid);
+        } catch (err: any) {
+            console.error('Failed to upload photo:', err);
+            alert(err.message || 'Gagal mengunggah foto');
+        } finally {
+            setSidebarPhotoUploading(false);
+            if (sidebarPhotoInputRef.current) {
+                sidebarPhotoInputRef.current.value = '';
+            }
+        }
+    }, [familyId, user, selectedPerson]);
+
+    // Handle sidebar photo delete
+    const handleSidebarPhotoDelete = useCallback(async () => {
+        if (!user || !selectedPerson?.photoUrl) return;
+
+        setSidebarPhotoUploading(true);
+        try {
+            await deletePersonPhoto(familyId, selectedPerson.personId);
+            await updatePerson(familyId, selectedPerson.personId, { photoUrl: '' } as any, user.uid);
+        } catch (err) {
+            console.error('Failed to delete photo:', err);
+        } finally {
+            setSidebarPhotoUploading(false);
+        }
+    }, [familyId, user, selectedPerson]);
+
     if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 via-teal-50 to-cyan-50">
@@ -426,18 +466,53 @@ export default function FamilyPage() {
                                     }}
                                 />
                             ) : (
-                                <PersonCard
-                                    person={selectedPerson}
-                                    scriptMode={scriptMode}
-                                    generation={personGenerations.get(selectedPerson.personId)}
-                                    showActions={canEdit}
-                                    onEdit={() => handleEditPerson(selectedPerson)}
-                                    onAddRelationship={() => {
-                                        setRelationType('spouse');
-                                        setTargetPersonId('');
-                                        setShowRelationshipModal(true);
-                                    }}
-                                />
+                                <>
+                                    <PersonCard
+                                        person={selectedPerson}
+                                        scriptMode={scriptMode}
+                                        generation={personGenerations.get(selectedPerson.personId)}
+                                        showActions={canEdit}
+                                        onEdit={() => handleEditPerson(selectedPerson)}
+                                        onAddRelationship={() => {
+                                            setRelationType('spouse');
+                                            setTargetPersonId('');
+                                            setShowRelationshipModal(true);
+                                        }}
+                                    />
+
+                                    {/* Photo Upload Section */}
+                                    {canEdit && (
+                                        <div className="mt-3 p-3 bg-stone-50 rounded-lg border border-stone-200">
+                                            <input
+                                                ref={sidebarPhotoInputRef}
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={handleSidebarPhotoUpload}
+                                                className="hidden"
+                                                disabled={sidebarPhotoUploading}
+                                            />
+                                            <div className="text-xs text-stone-500 mb-2">📷 Foto Anggota</div>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => sidebarPhotoInputRef.current?.click()}
+                                                    disabled={sidebarPhotoUploading}
+                                                    className="flex-1 px-3 py-2 text-sm bg-teal-100 text-teal-700 rounded-lg hover:bg-teal-200 transition disabled:opacity-50"
+                                                >
+                                                    {sidebarPhotoUploading ? '⏳ Uploading...' : selectedPerson.photoUrl ? '🔄 Ganti Foto' : '📷 Upload Foto'}
+                                                </button>
+                                                {selectedPerson.photoUrl && !sidebarPhotoUploading && (
+                                                    <button
+                                                        onClick={handleSidebarPhotoDelete}
+                                                        className="px-3 py-2 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition"
+                                                        title="Hapus foto"
+                                                    >
+                                                        🗑️
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
                             )}
 
                             {/* Existing Relationships */}
