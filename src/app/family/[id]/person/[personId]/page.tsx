@@ -203,41 +203,52 @@ export default function PersonDetailPage() {
 
                     <div className="flex items-center gap-6">
                         {/* Avatar - Clickable for photo upload */}
-                        <div className="relative group">
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/*"
-                                onChange={handlePhotoUpload}
-                                className="hidden"
-                                disabled={!canEdit || photoUploading}
-                            />
-                            <div
-                                className={`w-24 h-24 rounded-full bg-white/20 flex items-center justify-center text-5xl overflow-hidden ${canEdit ? 'cursor-pointer hover:ring-4 hover:ring-white/50 transition' : ''}`}
-                                onClick={() => canEdit && fileInputRef.current?.click()}
-                            >
-                                {photoUploading ? (
-                                    <div className="w-8 h-8 border-3 border-white border-t-transparent rounded-full animate-spin"></div>
-                                ) : person.photoUrl ? (
-                                    <img src={person.photoUrl} alt={person.fullName} className="w-full h-full object-cover" />
-                                ) : (
-                                    genderIcon
+                        <div className="flex flex-col items-center gap-2">
+                            <div className="relative group">
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handlePhotoUpload}
+                                    className="hidden"
+                                    disabled={!canEdit || photoUploading}
+                                />
+                                <div
+                                    className={`w-24 h-24 rounded-full bg-white/20 flex items-center justify-center text-5xl overflow-hidden ${canEdit ? 'cursor-pointer hover:ring-4 hover:ring-white/50 transition' : ''}`}
+                                    onClick={() => canEdit && fileInputRef.current?.click()}
+                                >
+                                    {photoUploading ? (
+                                        <div className="w-8 h-8 border-3 border-white border-t-transparent rounded-full animate-spin"></div>
+                                    ) : person.photoUrl ? (
+                                        <img src={person.photoUrl} alt={person.fullName} className="w-full h-full object-cover" />
+                                    ) : (
+                                        genderIcon
+                                    )}
+                                </div>
+                                {/* Upload hint on hover */}
+                                {canEdit && !photoUploading && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition pointer-events-none">
+                                        <span className="text-white text-xl">📷</span>
+                                    </div>
+                                )}
+                                {/* Delete photo button */}
+                                {canEdit && person.photoUrl && !photoUploading && (
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handlePhotoDelete(); }}
+                                        className="absolute -bottom-1 -right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600 transition shadow"
+                                        title="Hapus foto"
+                                    >
+                                        ✕
+                                    </button>
                                 )}
                             </div>
-                            {/* Upload hint on hover */}
+                            {/* Explicit Upload Button */}
                             {canEdit && !photoUploading && (
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition pointer-events-none">
-                                    <span className="text-white text-xl">📷</span>
-                                </div>
-                            )}
-                            {/* Delete photo button */}
-                            {canEdit && person.photoUrl && !photoUploading && (
                                 <button
-                                    onClick={(e) => { e.stopPropagation(); handlePhotoDelete(); }}
-                                    className="absolute -bottom-1 -right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600 transition shadow"
-                                    title="Hapus foto"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="px-3 py-1 bg-white/20 hover:bg-white/30 text-white text-xs rounded-full transition flex items-center gap-1"
                                 >
-                                    ✕
+                                    📷 {person.photoUrl ? 'Ganti Foto' : 'Upload Foto'}
                                 </button>
                             )}
                         </div>
