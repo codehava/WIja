@@ -59,7 +59,7 @@ export function FamilyStats({
 
         if (rootAncestor) {
             persons.forEach(p => {
-                const gen = calculateGeneration(p.personId, personsMap, rootAncestor.personId);
+                const gen = calculateGeneration(p.personId, rootAncestor.personId, personsMap);
                 if (gen > maxGeneration) maxGeneration = gen;
             });
         }

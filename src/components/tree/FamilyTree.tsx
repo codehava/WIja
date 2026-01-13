@@ -10,7 +10,7 @@ import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import domtoimage from 'dom-to-image-more';
 import jsPDF from 'jspdf';
 import { Person, Relationship, ScriptMode } from '@/types';
-import { findRootAncestor } from '@/lib/generation/calculator';
+import { findRootAncestor, calculateAllGenerations } from '@/lib/generation/calculator';
 import { TreeSearch } from './TreeSearch';
 import { TreeMinimap } from './TreeMinimap';
 
@@ -261,6 +261,25 @@ export function FamilyTree({
                 pos.y < viewBottom && nodeBottom > viewTop;
         });
     }, [persons, positions, pan, zoom]);
+
+    // Calculate generation for each person (for color bands)
+    const generations = useMemo(() => {
+        const rootAncestor = findRootAncestor(persons);
+        if (!rootAncestor) return new Map<string, number>();
+        return calculateAllGenerations(persons, rootAncestor.personId);
+    }, [persons]);
+
+    // Generation color palette (soft pastels for visual appeal)
+    const GENERATION_COLORS = [
+        'from-amber-100 to-amber-50 border-amber-300',     // Gen 1 - Root
+        'from-orange-100 to-orange-50 border-orange-300',  // Gen 2
+        'from-rose-100 to-rose-50 border-rose-300',        // Gen 3
+        'from-fuchsia-100 to-fuchsia-50 border-fuchsia-300', // Gen 4
+        'from-violet-100 to-violet-50 border-violet-300',  // Gen 5
+        'from-indigo-100 to-indigo-50 border-indigo-300',  // Gen 6
+        'from-sky-100 to-sky-50 border-sky-300',          // Gen 7
+        'from-cyan-100 to-cyan-50 border-cyan-300',       // Gen 8+
+    ];
 
     // Calculate connections based on current positions
     const connections = useMemo(() => {
@@ -557,6 +576,63 @@ export function FamilyTree({
     const handleZoomIn = () => setZoom(z => Math.min(z + 0.15, 3)); // Up to 300% for details
     const handleZoomOut = () => setZoom(z => Math.max(z - 0.15, 0.05)); // Down to 5% for overview
     const handleZoomReset = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // MOBILE TOUCH GESTURES - Pinch to zoom + Two-finger pan
+    // ═══════════════════════════════════════════════════════════════════════════════
+    interface TouchPoint { clientX: number; clientY: number; }
+    const touchStartRef = useRef<{ touches: TouchPoint[]; zoom: number; pan: { x: number; y: number } } | null>(null);
+
+    const handleTouchStart = useCallback((e: React.TouchEvent) => {
+        if (e.touches.length === 2) {
+            // Two-finger gesture - store initial state
+            e.preventDefault();
+            touchStartRef.current = {
+                touches: [e.touches[0], e.touches[1]],
+                zoom,
+                pan
+            };
+        }
+    }, [zoom, pan]);
+
+    const handleTouchMove = useCallback((e: React.TouchEvent) => {
+        if (e.touches.length === 2 && touchStartRef.current) {
+            e.preventDefault();
+            const { touches: startTouches, zoom: startZoom, pan: startPan } = touchStartRef.current;
+
+            // Calculate initial distance between fingers
+            const startDist = Math.hypot(
+                startTouches[1].clientX - startTouches[0].clientX,
+                startTouches[1].clientY - startTouches[0].clientY
+            );
+
+            // Calculate current distance
+            const currentDist = Math.hypot(
+                e.touches[1].clientX - e.touches[0].clientX,
+                e.touches[1].clientY - e.touches[0].clientY
+            );
+
+            // Calculate zoom scale
+            const scale = currentDist / startDist;
+            const newZoom = Math.min(Math.max(startZoom * scale, 0.05), 3);
+
+            // Calculate pan delta (average movement of both fingers)
+            const startCenterX = (startTouches[0].clientX + startTouches[1].clientX) / 2;
+            const startCenterY = (startTouches[0].clientY + startTouches[1].clientY) / 2;
+            const currentCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            const currentCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+
+            setZoom(newZoom);
+            setPan({
+                x: startPan.x + (currentCenterX - startCenterX),
+                y: startPan.y + (currentCenterY - startCenterY)
+            });
+        }
+    }, []);
+
+    const handleTouchEnd = useCallback(() => {
+        touchStartRef.current = null;
+    }, []);
 
     // Fit to screen function
     const handleFitToScreen = useCallback(() => {
@@ -973,6 +1049,9 @@ export function FamilyTree({
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
                 onWheel={handleWheel}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
             >
                 <div
                     className="tree-content"
@@ -1011,13 +1090,16 @@ export function FamilyTree({
                         const pos = positions.get(person.personId);
                         if (!pos) return null;
 
-                        const genderStyles = {
-                            male: { bg: 'bg-blue-50', border: 'border-blue-400', textColor: 'text-blue-900' },
-                            female: { bg: 'bg-pink-50', border: 'border-pink-400', textColor: 'text-pink-900' },
-                            other: { bg: 'bg-purple-50', border: 'border-purple-400', textColor: 'text-purple-900' },
-                            unknown: { bg: 'bg-gray-50', border: 'border-gray-400', textColor: 'text-gray-900' }
-                        };
-                        const style = genderStyles[person.gender] || genderStyles.unknown;
+                        // Get generation for color banding
+                        const personGen = generations.get(person.personId) || 1;
+                        const genColorIndex = Math.min(personGen - 1, GENERATION_COLORS.length - 1);
+                        const genColor = GENERATION_COLORS[genColorIndex];
+
+                        // Gender shape colors (for the icon/avatar)
+                        const genderShapeColor = person.gender === 'female' ? 'fill-pink-500 stroke-pink-600' :
+                            person.gender === 'male' ? 'fill-blue-500 stroke-blue-600' :
+                                'fill-purple-500 stroke-purple-600';
+
                         // Build full name from components
                         const displayName = [person.firstName, person.middleName, person.lastName]
                             .filter(Boolean).join(' ') || person.fullName || person.firstName;
@@ -1098,14 +1180,14 @@ export function FamilyTree({
                                 onMouseDown={(e) => handleNodeMouseDown(e, person.personId)}
                             >
                                 {/* Horizontal layout: Shape on left, text on right */}
-                                <div className={`${style.bg} ${style.border} border-2 rounded-xl p-3 h-full shadow-md hover:shadow-lg transition-all flex items-center gap-3`}>
+                                <div className={`bg-gradient-to-br ${genColor} border-2 rounded-xl p-3 h-full shadow-md hover:shadow-lg transition-all flex items-center gap-3`}>
                                     {/* Gender Shape */}
                                     {renderShape()}
 
                                     {/* Names beside shape */}
                                     <div className="flex-1 min-w-0 overflow-hidden">
                                         {(scriptMode === 'latin' || scriptMode === 'both') && (
-                                            <div className={`text-sm font-semibold leading-tight break-words ${style.textColor || 'text-stone-800'}`}>
+                                            <div className="text-sm font-semibold leading-tight break-words text-stone-800">
                                                 {displayName}
                                             </div>
                                         )}
