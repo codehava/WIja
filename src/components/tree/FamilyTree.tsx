@@ -29,9 +29,22 @@ export interface FamilyTreeProps {
 }
 
 // Layout constants
-const NODE_WIDTH = 220;
+const NODE_MIN_WIDTH = 180;
+const NODE_MAX_WIDTH = 350;
 const NODE_HEIGHT = 130;
+const NODE_WIDTH = 220; // Default for calculations
 const CANVAS_PADDING = 150; // Padding around the tree
+
+// Calculate dynamic node width based on name length
+function calculateNodeWidth(displayName: string, lontaraName?: string): number {
+    const latinChars = displayName.length;
+    const lontaraChars = lontaraName?.length || 0;
+    const maxChars = Math.max(latinChars, lontaraChars);
+
+    // Approx 8px per char + padding for shape (60px) + margins (40px)
+    const calculatedWidth = Math.max(maxChars * 8, 80) + 100;
+    return Math.min(Math.max(calculatedWidth, NODE_MIN_WIDTH), NODE_MAX_WIDTH);
+}
 
 interface NodePosition {
     x: number;
@@ -1172,11 +1185,17 @@ export function FamilyTree({
                             }
                         };
 
+                        // Calculate dynamic width for this node
+                        const lontaraFullName = person.lontaraName
+                            ? [person.lontaraName.first, person.lontaraName.middle, person.lontaraName.last].filter(Boolean).join(' ')
+                            : '';
+                        const nodeWidth = calculateNodeWidth(displayName, lontaraFullName);
+
                         return (
                             <div
                                 key={person.personId}
                                 className={`tree-node absolute select-none transition-all ${isDragging ? 'z-50 shadow-2xl cursor-grabbing' : 'z-10 cursor-grab'} ${isSelected ? 'ring-4 ring-teal-400 ring-offset-2' : ''} ${isHighlighted ? 'ring-4 ring-amber-400 ring-offset-2 animate-pulse' : ''}`}
-                                style={{ left: pos.x, top: pos.y, width: NODE_WIDTH, height: NODE_HEIGHT }}
+                                style={{ left: pos.x, top: pos.y, width: nodeWidth, minHeight: NODE_HEIGHT }}
                                 onMouseDown={(e) => handleNodeMouseDown(e, person.personId)}
                             >
                                 {/* Horizontal layout: Shape on left, text on right */}
@@ -1184,18 +1203,16 @@ export function FamilyTree({
                                     {/* Gender Shape */}
                                     {renderShape()}
 
-                                    {/* Names beside shape */}
-                                    <div className="flex-1 min-w-0 overflow-hidden">
+                                    {/* Names beside shape - full display */}
+                                    <div className="flex-1 min-w-0">
                                         {(scriptMode === 'latin' || scriptMode === 'both') && (
-                                            <div className="text-sm font-semibold leading-tight break-words text-stone-800">
+                                            <div className={`font-semibold leading-snug text-stone-800 ${displayName.length > 30 ? 'text-xs' : displayName.length > 20 ? 'text-sm' : 'text-sm'}`}>
                                                 {displayName}
                                             </div>
                                         )}
-                                        {(scriptMode === 'lontara' || scriptMode === 'both') && person.lontaraName && (
-                                            <div className="text-lg text-teal-700 font-lontara leading-relaxed mt-0.5">
-                                                {[person.lontaraName.first, person.lontaraName.middle, person.lontaraName.last]
-                                                    .filter(Boolean)
-                                                    .join(' ')}
+                                        {(scriptMode === 'lontara' || scriptMode === 'both') && lontaraFullName && (
+                                            <div className={`text-teal-700 font-lontara leading-snug mt-0.5 ${lontaraFullName.length > 20 ? 'text-sm' : 'text-base'}`}>
+                                                {lontaraFullName}
                                             </div>
                                         )}
                                     </div>
