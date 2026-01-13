@@ -104,11 +104,8 @@ export async function createPerson(
             siblingIds: []
         },
         isRootAncestor: input.isRootAncestor || false,
-        position: {
-            x: 100 + Math.random() * 400,
-            y: 100 + Math.random() * 300,
-            fixed: false
-        },
+        // NOTE: Position will be calculated by FamilyTree component
+        // Do NOT set position here - let calculateSimplePosition handle it
         createdBy: userId,
         createdAt: serverTimestamp(),
         updatedBy: userId,
@@ -172,6 +169,40 @@ export async function getPerson(
 export async function getAllPersons(familyId: string): Promise<Person[]> {
     const snapshot = await getDocs(getPersonsCollection(familyId));
     return snapshot.docs.map(doc => doc.data() as Person);
+}
+
+/**
+ * Get persons with pagination (for initial load optimization)
+ * Uses cursor-based pagination for efficient large dataset handling
+ */
+export async function getPersonsPaginated(
+    familyId: string,
+    pageSize: number = 100,
+    startAfterDoc?: any
+): Promise<{ persons: Person[]; lastDoc: any | null; hasMore: boolean }> {
+    const { limit, startAfter } = await import('firebase/firestore');
+
+    let q = query(
+        getPersonsCollection(familyId),
+        orderBy('createdAt', 'desc'),
+        limit(pageSize)
+    );
+
+    if (startAfterDoc) {
+        q = query(
+            getPersonsCollection(familyId),
+            orderBy('createdAt', 'desc'),
+            startAfter(startAfterDoc),
+            limit(pageSize)
+        );
+    }
+
+    const snapshot = await getDocs(q);
+    const persons = snapshot.docs.map(doc => doc.data() as Person);
+    const lastDoc = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
+    const hasMore = snapshot.docs.length === pageSize;
+
+    return { persons, lastDoc, hasMore };
 }
 
 /**

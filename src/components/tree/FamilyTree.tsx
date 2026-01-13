@@ -11,6 +11,8 @@ import domtoimage from 'dom-to-image-more';
 import jsPDF from 'jspdf';
 import { Person, Relationship, ScriptMode } from '@/types';
 import { findRootAncestor } from '@/lib/generation/calculator';
+import { TreeSearch } from './TreeSearch';
+import { TreeMinimap } from './TreeMinimap';
 
 export interface FamilyTreeProps {
     persons: Person[];
@@ -37,7 +39,7 @@ interface NodePosition {
 }
 
 // Calculate layout using custom algorithm with dagre
-import { calculateTreeLayout } from '@/lib/layout/treeLayout';
+import { calculateTreeLayout, calculateSimplePosition, ViewportInfo } from '@/lib/layout/treeLayout';
 
 
 export function FamilyTree({
@@ -60,6 +62,11 @@ export function FamilyTree({
     const dragStartPos = useRef<{ x: number, y: number } | null>(null);
     const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
 
+    // Track current viewport for new person placement (ref to avoid effect re-triggers)
+    const viewportRef = useRef({ pan: { x: 0, y: 0 }, zoom: 1 });
+    // Keep ref in sync with state
+    viewportRef.current = { pan, zoom };
+
     // Node positions (can be dragged)
     const [nodePositions, setNodePositions] = useState<Map<string, NodePosition>>(new Map());
     const [isInitialized, setIsInitialized] = useState(false);
@@ -71,6 +78,28 @@ export function FamilyTree({
     // Canvas panning
     const [isPanning, setIsPanning] = useState(false);
     const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+
+    // Search highlight state
+    const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
+
+    // Focus on person (for search navigation)
+    const focusOnPerson = useCallback((personId: string) => {
+        const pos = nodePositions.get(personId);
+        if (!pos || !containerRef.current) return;
+
+        const container = containerRef.current;
+        const centerX = container.clientWidth / 2;
+        const centerY = container.clientHeight / 2;
+
+        // Calculate pan to center on person
+        const targetZoom = Math.max(zoom, 0.8); // Ensure visible
+        const newPanX = centerX - (pos.x + NODE_WIDTH / 2) * targetZoom;
+        const newPanY = centerY - (pos.y + NODE_HEIGHT / 2) * targetZoom;
+
+        setZoom(targetZoom);
+        setPan({ x: newPanX, y: newPanY });
+        setHighlightedIds([personId]);
+    }, [nodePositions, zoom]);
 
     // Build persons map
     const personsMap = useMemo(() => {
@@ -91,72 +120,147 @@ export function FamilyTree({
         return map;
     }, [persons]);
 
-    // Calculate layout using dagre (only for persons without saved positions)
-    const calculatedPositions = useMemo(() => {
-        return calculateTreeLayout(persons, collapsedIds, relationships);
-    }, [persons, collapsedIds, relationships]);
+    // PERFORMANCE OPTIMIZATION: Only run dagre layout on first load OR when "Rapihkan" is clicked
+    // For new persons, use fast O(1) calculateSimplePosition instead of O(n²) dagre
+    const initialLayoutRef = useRef<Map<string, NodePosition> | null>(null);
+
+    // Calculate dagre layout ONLY on first load when no saved positions exist
+    // This is lazy-evaluated and cached in ref
+    const getInitialDagreLayout = useCallback(() => {
+        if (initialLayoutRef.current) return initialLayoutRef.current;
+
+        // Check if tree was already arranged (has fixed positions)
+        const hasArrangedPositions = persons.some(p => p.position?.fixed === true);
+
+        if (hasArrangedPositions) {
+            // Tree was already arranged - don't run dagre, use saved positions
+            initialLayoutRef.current = new Map();
+            return initialLayoutRef.current;
+        }
+
+        // First time load without saved positions - run dagre once
+        console.log('⚡ Running dagre layout for first load (', persons.length, 'persons)');
+        initialLayoutRef.current = calculateTreeLayout(persons, collapsedIds, relationships);
+        return initialLayoutRef.current;
+    }, []); // Empty deps - only called once on first load
 
     // Initialize positions on first load - prefer saved positions from Firestore
     useEffect(() => {
         if (!isInitialized && persons.length > 0) {
             const initialMap = new Map<string, NodePosition>();
 
-            // Check if most persons have saved positions (meaning tree was arranged before)
-            // Use position.fixed flag - set to true when user manually drags a node
-            const personsWithSavedPos = persons.filter(p =>
-                p.position && p.position.fixed === true
-            );
+            // Check if tree was already arranged
+            const hasArrangedPositions = persons.some(p => p.position?.fixed === true);
 
-            const useSavedPositions = personsWithSavedPos.length > 0; // If any person has fixed position, use saved positions
-
-            persons.forEach(p => {
-                if (useSavedPositions && savedPositions.has(p.personId)) {
-                    // Use saved position from Firestore
-                    initialMap.set(p.personId, savedPositions.get(p.personId)!);
-                } else {
-                    // Use calculated position from dagre for new or first-time load
-                    const calcPos = calculatedPositions.get(p.personId);
-                    if (calcPos) {
-                        initialMap.set(p.personId, calcPos);
+            if (hasArrangedPositions) {
+                // Use saved positions, calculate simple positions for any missing
+                persons.forEach(p => {
+                    if (savedPositions.has(p.personId)) {
+                        initialMap.set(p.personId, savedPositions.get(p.personId)!);
+                    } else {
+                        // New person without saved position - use simple position
+                        const simplePos = calculateSimplePosition(p, initialMap, personsMap);
+                        initialMap.set(p.personId, simplePos);
                     }
-                }
-            });
+                });
+            } else {
+                // First load - run dagre layout ONCE
+                const dagrePositions = getInitialDagreLayout();
+                persons.forEach(p => {
+                    const pos = dagrePositions.get(p.personId);
+                    if (pos) {
+                        initialMap.set(p.personId, pos);
+                    } else {
+                        // Fallback for any missed persons
+                        const simplePos = calculateSimplePosition(p, initialMap, personsMap);
+                        initialMap.set(p.personId, simplePos);
+                    }
+                });
+            }
 
             if (initialMap.size > 0) {
                 setNodePositions(initialMap);
                 setIsInitialized(true);
             }
         }
-    }, [persons, savedPositions, calculatedPositions, isInitialized]);
+    }, [persons, savedPositions, personsMap, isInitialized, getInitialDagreLayout]);
 
-    // Update positions when new persons are added (use dagre for new persons only)
+    // Update positions when new persons are added - use SIMPLE POSITION (fast O(1))
     useEffect(() => {
         if (!isInitialized) return;
 
         setNodePositions(prev => {
             const newMap = new Map(prev);
             let hasChange = false;
+
+            // Build viewport info using REF (to get latest values without re-triggering effect)
+            const currentViewport = viewportRef.current;
+            const viewport: ViewportInfo = {
+                pan: currentViewport.pan,
+                zoom: currentViewport.zoom,
+                containerWidth: containerRef.current?.clientWidth ?? 800,
+                containerHeight: containerRef.current?.clientHeight ?? 600
+            };
+
+            console.log('📍 Viewport for new person placement:', viewport);
+
             persons.forEach(p => {
                 if (!newMap.has(p.personId)) {
-                    // New person - use saved position if available, otherwise dagre
+                    // New person - use saved position if available, otherwise SIMPLE position (not dagre!)
                     const savedPos = savedPositions.get(p.personId);
-                    const calcPos = calculatedPositions.get(p.personId);
-                    const pos = savedPos || calcPos;
-                    if (pos) {
-                        newMap.set(p.personId, pos);
-                        hasChange = true;
+                    if (savedPos) {
+                        newMap.set(p.personId, savedPos);
+                    } else {
+                        // PERFORMANCE: Use simple O(1) position instead of O(n²) dagre
+                        // Pass viewport so new person appears in current view
+                        const simplePos = calculateSimplePosition(p, newMap, personsMap, viewport);
+                        newMap.set(p.personId, simplePos);
+                        console.log('⚡ Quick position for new person:', p.firstName, 'at', simplePos);
                     }
+                    hasChange = true;
                 }
             });
+
             return hasChange ? newMap : prev;
         });
-    }, [persons, savedPositions, calculatedPositions, isInitialized]);
+    }, [persons, savedPositions, personsMap, isInitialized]);
 
-    // Get current positions
+    // Get current positions (no longer depends on calculatedPositions - avoiding re-triggers)
     const positions = useMemo(() => {
         if (nodePositions.size > 0) return nodePositions;
-        return calculatedPositions;
-    }, [nodePositions, calculatedPositions]);
+        // Fallback for edge cases - this should rarely happen now
+        return new Map<string, NodePosition>();
+    }, [nodePositions]);
+
+    // Highlighted IDs set for quick lookup
+    const highlightedSet = useMemo(() => new Set(highlightedIds), [highlightedIds]);
+
+    // VIRTUALIZATION: Only render persons visible in viewport + buffer
+    const visiblePersons = useMemo(() => {
+        if (!containerRef.current || positions.size === 0) return persons;
+
+        const buffer = 300; // Render nodes slightly outside viewport
+        const containerWidth = containerRef.current.clientWidth;
+        const containerHeight = containerRef.current.clientHeight;
+
+        // Calculate viewport bounds in canvas coordinates
+        const viewLeft = -pan.x / zoom - buffer;
+        const viewTop = -pan.y / zoom - buffer;
+        const viewRight = (-pan.x + containerWidth) / zoom + buffer;
+        const viewBottom = (-pan.y + containerHeight) / zoom + buffer;
+
+        return persons.filter(p => {
+            const pos = positions.get(p.personId);
+            if (!pos) return false;
+
+            // Check if node (with its size) intersects viewport
+            const nodeRight = pos.x + NODE_WIDTH;
+            const nodeBottom = pos.y + NODE_HEIGHT;
+
+            return pos.x < viewRight && nodeRight > viewLeft &&
+                pos.y < viewBottom && nodeBottom > viewTop;
+        });
+    }, [persons, positions, pan, zoom]);
 
     // Calculate connections based on current positions
     const connections = useMemo(() => {
@@ -296,10 +400,10 @@ export function FamilyTree({
         return connLines;
     }, [persons, positions, personsMap]);
 
-    // Canvas size - dynamically calculated based on actual node positions
+    // Canvas size - dynamically calculated with extra space for panning in all directions
     const canvasSize = useMemo(() => {
         if (positions.size === 0) {
-            return { width: 800, height: 600 };
+            return { width: 1200, height: 800 }; // Default for empty canvas
         }
 
         let minX = Infinity, minY = Infinity, maxX = 0, maxY = 0;
@@ -310,9 +414,14 @@ export function FamilyTree({
             maxY = Math.max(maxY, pos.y + NODE_HEIGHT);
         });
 
-        // Add padding around the tree for comfortable viewing
-        const width = maxX + CANVAS_PADDING * 2;
-        const height = maxY + CANVAS_PADDING * 2;
+        // Calculate content bounds
+        const contentWidth = maxX - minX;
+        const contentHeight = maxY - minY;
+
+        // Add moderate padding for comfortable panning (not too wide)
+        const EXTRA_SPACE = 200; // Reduced from 500
+        const width = Math.max(contentWidth + EXTRA_SPACE * 2, 1200);
+        const height = Math.max(contentHeight + EXTRA_SPACE * 2, 800);
 
         return { width, height };
     }, [positions]);
@@ -806,14 +915,39 @@ export function FamilyTree({
                 </div>
             </div>
 
+            {/* Search - Top Right */}
+            <div className="fixed top-20 right-4 z-30 print:hidden">
+                <TreeSearch
+                    persons={persons}
+                    onSelect={focusOnPerson}
+                    onHighlight={setHighlightedIds}
+                    className="w-64"
+                />
+            </div>
+
+            {/* Minimap - Bottom Right */}
+            <TreeMinimap
+                positions={positions}
+                persons={persons}
+                canvasSize={canvasSize}
+                viewport={{
+                    pan,
+                    zoom,
+                    containerWidth: containerRef.current?.clientWidth ?? 800,
+                    containerHeight: containerRef.current?.clientHeight ?? 600
+                }}
+                onNavigate={setPan}
+                className="fixed bottom-20 right-4 z-30 print:hidden"
+            />
+
             {/* Info - Fixed Position */}
             <div className="fixed bottom-4 left-4 z-30 text-xs bg-white/90 px-3 py-2 rounded-lg shadow border border-stone-200 print:hidden">
                 <div className="text-stone-600 font-medium">{Math.round(zoom * 100)}% • {persons.length} anggota</div>
                 <div className="text-stone-400">Scroll/geser = pan • Drag canvas = geser • Drag node = pindah</div>
             </div>
 
-            {/* Legend - Fixed Position */}
-            <div className="fixed bottom-4 right-4 z-30 text-xs bg-white/90 px-3 py-2 rounded-lg shadow border border-stone-200 print:hidden">
+            {/* Legend - Above Minimap */}
+            <div className="fixed bottom-44 right-4 z-30 text-xs bg-white/90 px-3 py-2 rounded-lg shadow border border-stone-200 print:hidden">
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1">
                         <div className="w-4 h-0.5 bg-pink-400"></div>
@@ -872,8 +1006,8 @@ export function FamilyTree({
                         ))}
                     </svg>
 
-                    {/* Person Nodes */}
-                    {persons.map(person => {
+                    {/* Person Nodes - VIRTUALIZED: only render visible */}
+                    {visiblePersons.map(person => {
                         const pos = positions.get(person.personId);
                         if (!pos) return null;
 
@@ -888,6 +1022,7 @@ export function FamilyTree({
                         const displayName = [person.firstName, person.middleName, person.lastName]
                             .filter(Boolean).join(' ') || person.fullName || person.firstName;
                         const isSelected = person.personId === selectedPersonId;
+                        const isHighlighted = highlightedSet.has(person.personId);
                         const isDragging = draggingNode === person.personId;
                         const shapeSize = 50;
 
@@ -958,7 +1093,7 @@ export function FamilyTree({
                         return (
                             <div
                                 key={person.personId}
-                                className={`tree-node absolute select-none transition-shadow ${isDragging ? 'z-50 shadow-2xl cursor-grabbing' : 'z-10 cursor-grab'} ${isSelected ? 'ring-4 ring-teal-400 ring-offset-2' : ''}`}
+                                className={`tree-node absolute select-none transition-all ${isDragging ? 'z-50 shadow-2xl cursor-grabbing' : 'z-10 cursor-grab'} ${isSelected ? 'ring-4 ring-teal-400 ring-offset-2' : ''} ${isHighlighted ? 'ring-4 ring-amber-400 ring-offset-2 animate-pulse' : ''}`}
                                 style={{ left: pos.x, top: pos.y, width: NODE_WIDTH, height: NODE_HEIGHT }}
                                 onMouseDown={(e) => handleNodeMouseDown(e, person.personId)}
                             >

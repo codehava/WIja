@@ -6,9 +6,86 @@ interface NodePosition {
     y: number;
 }
 
-// Layout Constants - REDUCED for compact view
+// ═══════════════════════════════════════════════════════════════════════════════
+// SIMPLE POSITION CALCULATION (for new persons - avoids expensive dagre)
+// ═══════════════════════════════════════════════════════════════════════════════
+
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 130;
+
+export interface ViewportInfo {
+    pan: { x: number; y: number };
+    zoom: number;
+    containerWidth: number;
+    containerHeight: number;
+}
+
+/**
+ * Calculate a simple position for a new person without running full dagre layout.
+ * This is O(1) and should be used when adding new persons to avoid 10+ second delays.
+ * 
+ * Strategy:
+ * - If person has a parent with known position → place below parent with offset
+ * - If person has a spouse with known position → place next to spouse
+ * - Otherwise → place in current viewport area (where user is looking)
+ */
+export function calculateSimplePosition(
+    newPerson: Person,
+    existingPositions: Map<string, NodePosition>,
+    personsMap: Map<string, Person>,
+    viewport?: ViewportInfo
+): NodePosition {
+    // Try to find a parent with a known position
+    for (const parentId of newPerson.relationships.parentIds) {
+        const parentPos = existingPositions.get(parentId);
+        if (parentPos) {
+            // Place below parent with slight random offset to avoid overlap
+            const siblingCount = personsMap.get(parentId)?.relationships.childIds.length ?? 1;
+            const offsetX = (Math.random() - 0.5) * (siblingCount * 50);
+            return {
+                x: parentPos.x + offsetX,
+                y: parentPos.y + NODE_HEIGHT + 100 + Math.random() * 50
+            };
+        }
+    }
+
+    // Try to find a spouse with a known position
+    for (const spouseId of newPerson.relationships.spouseIds) {
+        const spousePos = existingPositions.get(spouseId);
+        if (spousePos) {
+            // Place next to spouse
+            return {
+                x: spousePos.x + NODE_WIDTH + 30,
+                y: spousePos.y
+            };
+        }
+    }
+
+    // Fallback: Place at BOTTOM-LEFT of existing nodes
+    // This makes it easy to find new persons
+    if (existingPositions.size > 0) {
+        let minX = Infinity;
+        let maxY = 0;
+        existingPositions.forEach(pos => {
+            minX = Math.min(minX, pos.x);
+            maxY = Math.max(maxY, pos.y);
+        });
+
+        // Place below and to the left of existing nodes
+        return {
+            x: minX + (Math.random() * 100), // Slight random to avoid overlap
+            y: maxY + NODE_HEIGHT + 80 + (Math.random() * 50)
+        };
+    }
+
+    // Empty tree - start at top-left with padding
+    return {
+        x: 100 + Math.random() * 50,
+        y: 100 + Math.random() * 50
+    };
+}
+
+// Layout Constants for full dagre layout
 const SPOUSE_GAP = 25;    // Gap between spouses
 const RANK_SEP = 160;     // Vertical gap (was 220)
 const NODE_SEP = 80;      // Horizontal gap (was 150)
