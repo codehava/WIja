@@ -6,7 +6,7 @@
 'use client';
 
 import React, { createContext, useContext, useCallback, useState } from 'react';
-import { useSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from 'next-auth/react';
+import { SessionProvider, useSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from 'next-auth/react';
 import type { UserProfile, MemberRole } from '@/types';
 
 // ─────────────────────────────────────────────────────────────────────────────────
@@ -55,7 +55,7 @@ interface AuthProviderProps {
     children: React.ReactNode;
 }
 
-export function AuthProvider({ children }: AuthProviderProps) {
+function AuthProviderInner({ children }: AuthProviderProps) {
     const { data: session, status } = useSession();
     const [error, setError] = useState<string | null>(null);
 
@@ -202,6 +202,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
         <AuthContext.Provider value={value}>
             {children}
         </AuthContext.Provider>
+    );
+}
+
+export function AuthProvider({ children }: AuthProviderProps) {
+    return (
+        <SessionProvider>
+            <AuthProviderInner>{children}</AuthProviderInner>
+        </SessionProvider>
     );
 }
 
