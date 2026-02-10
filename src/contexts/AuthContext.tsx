@@ -112,7 +112,7 @@ function AuthProviderInner({ children }: AuthProviderProps) {
     const signInGoogle = useCallback(async () => {
         try {
             setError(null);
-            await nextAuthSignIn('google', { redirect: false });
+            await nextAuthSignIn('google', { callbackUrl: '/' });
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : 'Failed to sign in with Google';
             setError(message);

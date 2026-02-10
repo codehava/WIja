@@ -40,8 +40,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         strategy: 'jwt',
     },
     pages: {
-        signIn: '/auth/login',
-        error: '/auth/error',
+        // Login is handled on the home page (/)
     },
     providers: [
         Google({
