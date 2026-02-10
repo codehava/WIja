@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// WIJA - Family Error Boundary
-// Catches errors specific to family pages
+// WIJA - Person Detail Error Boundary
+// Catches errors specific to person detail pages
 // ═══════════════════════════════════════════════════════════════════════════════
 
 'use client';
@@ -8,7 +8,7 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 
-export default function FamilyError({
+export default function PersonError({
     error,
     reset,
 }: {
@@ -16,18 +16,18 @@ export default function FamilyError({
     reset: () => void;
 }) {
     useEffect(() => {
-        console.error('Family page error:', error);
+        console.error('Person detail error:', error);
     }, [error]);
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 via-teal-50 to-cyan-50 px-4">
             <div className="text-center max-w-md">
-                <div className="text-6xl mb-4">🌳</div>
+                <div className="text-6xl mb-4">👤</div>
                 <h2 className="text-xl font-bold text-stone-800 mb-2">
-                    Gagal Memuat Pohon Keluarga
+                    Gagal Memuat Data Anggota
                 </h2>
                 <p className="text-stone-600 mb-6">
-                    Terjadi kesalahan saat memuat data keluarga. Periksa koneksi internet Anda dan coba lagi.
+                    Terjadi kesalahan saat memuat detail anggota keluarga. Silakan coba lagi.
                 </p>
                 {process.env.NODE_ENV === 'development' && error.message && (
                     <pre className="text-xs text-left text-red-700 bg-red-50 border border-red-200 p-3 rounded-lg mb-4 overflow-auto max-h-48">

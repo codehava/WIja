@@ -7,6 +7,7 @@ import type { Metadata } from 'next';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { QueryProvider } from '@/contexts/QueryProvider';
+import { Toaster } from 'react-hot-toast';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -56,6 +57,15 @@ export default function RootLayout({
                     <QueryProvider>
                         <AuthProvider>
                             {children}
+                            <Toaster
+                                position="bottom-right"
+                                toastOptions={{
+                                    duration: 4000,
+                                    style: { borderRadius: '0.75rem', fontSize: '0.875rem' },
+                                    success: { iconTheme: { primary: '#22c55e', secondary: '#fff' } },
+                                    error: { iconTheme: { primary: '#ef4444', secondary: '#fff' } },
+                                }}
+                            />
                         </AuthProvider>
                     </QueryProvider>
                 </ThemeProvider>

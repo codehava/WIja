@@ -8,12 +8,14 @@
 import { useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useFamilyTree } from '@/hooks/useFirestore';
+import { useFamilyTree, useInvalidate } from '@/hooks/useFirestore';
 import { useCanEdit, useIsAdmin, useIsSuperAdmin } from '@/hooks/useAuth';
 import { useAuth } from '@/contexts/AuthContext';
 import { Person, ScriptMode, CreatePersonInput, CreateRelationshipInput } from '@/types';
 import { personsApi, relationshipsApi } from '@/lib/api';
+import toast from 'react-hot-toast';
 import { FamilyTree } from '@/components/tree/FamilyTree';
+import { SkeletonTreeView } from '@/components/ui/Skeleton';
 import { PersonCard } from '@/components/person/PersonCard';
 import { PersonForm } from '@/components/person/PersonForm';
 import { SidebarEditForm } from '@/components/person/SidebarEditForm';
@@ -41,6 +43,7 @@ export default function FamilyPage() {
         loading,
         error
     } = useFamilyTree(familyId);
+    const { invalidatePersons, invalidateRelationships } = useInvalidate();
 
     // UI State
     const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
@@ -74,10 +77,11 @@ export default function FamilyPage() {
         setRegenerating(true);
         try {
             const result = await personsApi.regenerateAllLontaraNames(familyId);
-            alert(`✅ Berhasil regenerate ${result.count} nama Lontara!`);
+            toast.success(`Berhasil regenerate ${result.count} nama Lontara!`);
+            invalidatePersons(familyId);
         } catch (err) {
             console.error('Failed to regenerate Lontara:', err);
-            alert('❌ Gagal regenerate Lontara');
+            toast.error('Gagal regenerate Lontara');
         } finally {
             setRegenerating(false);
         }
@@ -109,6 +113,7 @@ export default function FamilyPage() {
                 // Create new person
                 await personsApi.createPerson(familyId, data);
             }
+            invalidatePersons(familyId);
             setShowPersonForm(false);
             setEditingPerson(null);
         } catch (err) {
@@ -151,6 +156,8 @@ export default function FamilyPage() {
                 });
             }
 
+            invalidatePersons(familyId);
+            invalidateRelationships(familyId);
             setShowRelationshipModal(false);
             setTargetPersonId('');
             setMarriageOrder(1);
@@ -194,10 +201,12 @@ export default function FamilyPage() {
         setFormLoading(true);
         try {
             await personsApi.deletePerson(familyId, selectedPerson.personId);
+            invalidatePersons(familyId);
+            invalidateRelationships(familyId);
             setSelectedPerson(null);
         } catch (err) {
             console.error('Failed to delete person:', err);
-            alert('Gagal menghapus anggota: ' + (err as Error).message);
+            toast.error('Gagal menghapus anggota: ' + (err as Error).message);
         } finally {
             setFormLoading(false);
         }
@@ -227,9 +236,11 @@ export default function FamilyPage() {
                 // selectedPerson is parent, relatedPersonId is child
                 await personsApi.removeParentChild(familyId, selectedPerson.personId, relatedPersonId);
             }
+            invalidatePersons(familyId);
+            invalidateRelationships(familyId);
         } catch (err) {
             console.error('Failed to remove relationship:', err);
-            alert('Gagal menghapus hubungan: ' + (err as Error).message);
+            toast.error('Gagal menghapus hubungan: ' + (err as Error).message);
         } finally {
             setFormLoading(false);
         }
@@ -263,9 +274,10 @@ export default function FamilyPage() {
         try {
             const { photoUrl } = await personsApi.uploadPersonPhoto(familyId, selectedPerson.personId, file);
             await personsApi.updatePerson(familyId, selectedPerson.personId, { photoUrl } as any);
+            invalidatePersons(familyId);
         } catch (err: any) {
             console.error('Failed to upload photo:', err);
-            alert(err.message || 'Gagal mengunggah foto');
+            toast.error(err.message || 'Gagal mengunggah foto');
         } finally {
             setSidebarPhotoUploading(false);
             if (sidebarPhotoInputRef.current) {
@@ -291,11 +303,8 @@ export default function FamilyPage() {
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 via-teal-50 to-cyan-50">
-                <div className="text-center">
-                    <div className="w-16 h-16 border-4 border-teal-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-stone-600">Memuat pohon keluarga...</p>
-                </div>
+            <div className="min-h-screen bg-gradient-to-br from-slate-100 via-teal-50 to-cyan-50">
+                <SkeletonTreeView />
             </div>
         );
     }

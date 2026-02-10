@@ -9,6 +9,7 @@ import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 
 import domtoimage from 'dom-to-image-more';
 import jsPDF from 'jspdf';
+import toast from 'react-hot-toast';
 import { Person, Relationship, ScriptMode } from '@/types';
 import { findRootAncestor, calculateAllGenerations } from '@/lib/generation/calculator';
 import { TreeSearch } from './TreeSearch';
@@ -927,7 +928,7 @@ export function FamilyTree({
 
         } catch (error) {
             console.error('PDF export error:', error);
-            alert('Gagal mengexport PDF. Silakan coba lagi.');
+            toast.error('Gagal mengexport PDF. Silakan coba lagi.');
         } finally {
             setIsExporting(false);
         }

@@ -31,6 +31,42 @@ export const queryKeys = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────────
+// INVALIDATION HOOK (call after mutations for instant UI updates)
+// ─────────────────────────────────────────────────────────────────────────────────
+
+export function useInvalidate() {
+    const queryClient = useQueryClient();
+    const { user } = useAuth();
+
+    return {
+        invalidatePersons: useCallback((familyId: string) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.persons.all(familyId) });
+        }, [queryClient]),
+
+        invalidateRelationships: useCallback((familyId: string) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.relationships.all(familyId) });
+        }, [queryClient]),
+
+        invalidateFamily: useCallback((familyId: string) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.families.detail(familyId) });
+        }, [queryClient]),
+
+        invalidateFamilies: useCallback(() => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.families.all });
+            if (user?.uid) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.families.user(user.uid) });
+            }
+        }, [queryClient, user?.uid]),
+
+        invalidateAll: useCallback((familyId: string) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.persons.all(familyId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.relationships.all(familyId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.families.detail(familyId) });
+        }, [queryClient]),
+    };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────
 // FAMILY HOOKS
 // ─────────────────────────────────────────────────────────────────────────────────
 

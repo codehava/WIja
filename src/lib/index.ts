@@ -3,10 +3,6 @@
 // Central export point for all services
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// Firebase
-export * from './firebase/config';
-export * from './firebase/auth';
-
 // Services
 export * from './services/families';
 export * from './services/persons';

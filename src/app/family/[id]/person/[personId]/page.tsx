@@ -8,11 +8,12 @@
 import { useState, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useFamilyTree } from '@/hooks/useFirestore';
+import { useFamilyTree, useInvalidate } from '@/hooks/useFirestore';
 import { useCanEdit } from '@/hooks/useAuth';
 import { useAuth } from '@/contexts/AuthContext';
 import { Person, ScriptMode, CreatePersonInput } from '@/types';
 import { personsApi } from '@/lib/api';
+import toast from 'react-hot-toast';
 import { PersonForm } from '@/components/person/PersonForm';
 import { PersonNode } from '@/components/person/PersonNode';
 import { DualScriptDisplay } from '@/components/aksara/DualScriptDisplay';
@@ -31,6 +32,7 @@ export default function PersonDetailPage() {
     const { user } = useAuth();
     const { hasRole: canEdit } = useCanEdit(familyId);
     const { family, persons, relationships, personsMap, personGenerations, loading } = useFamilyTree(familyId);
+    const { invalidatePersons } = useInvalidate();
 
     // UI State
     const [showEditForm, setShowEditForm] = useState(false);
@@ -128,9 +130,10 @@ export default function PersonDetailPage() {
             const { photoUrl } = await personsApi.uploadPersonPhoto(familyId, personId, file);
             // Update person with new photo URL
             await personsApi.updatePerson(familyId, personId, { photoUrl } as any);
+            invalidatePersons(familyId);
         } catch (err: any) {
             console.error('Failed to upload photo:', err);
-            alert(err.message || 'Gagal mengunggah foto');
+            toast.error(err.message || 'Gagal mengunggah foto');
         } finally {
             setPhotoUploading(false);
             // Reset file input

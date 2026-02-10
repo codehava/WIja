@@ -75,3 +75,39 @@ export const SkeletonCard = () => (
         </div>
     </div>
 );
+
+// Skeleton Tree Node - loading placeholder for tree nodes
+export const SkeletonTreeNode = () => (
+    <div className="inline-flex items-center gap-3 p-3 rounded-xl bg-stone-100 border-2 border-stone-200 animate-pulse" style={{ width: 200, height: 80 }}>
+        <div className="w-12 h-12 rounded-full bg-stone-200 flex-shrink-0" />
+        <div className="flex-1 space-y-2">
+            <div className="h-4 w-24 bg-stone-200 rounded" />
+            <div className="h-3 w-16 bg-stone-200 rounded" />
+        </div>
+    </div>
+);
+
+// Full page skeleton for tree view
+export const SkeletonTreeView = () => (
+    <div className="h-full w-full flex flex-col items-center justify-center gap-8 bg-gradient-to-br from-stone-100 to-stone-50 animate-pulse">
+        {/* Top row */}
+        <div className="flex gap-8">
+            <SkeletonTreeNode />
+        </div>
+        {/* Line */}
+        <div className="w-px h-8 bg-stone-200" />
+        {/* Second row */}
+        <div className="flex gap-8">
+            <SkeletonTreeNode />
+            <SkeletonTreeNode />
+        </div>
+        {/* Line */}
+        <div className="w-px h-8 bg-stone-200" />
+        {/* Third row */}
+        <div className="flex gap-8">
+            <SkeletonTreeNode />
+            <SkeletonTreeNode />
+            <SkeletonTreeNode />
+        </div>
+    </div>
+);
