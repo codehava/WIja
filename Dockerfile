@@ -49,7 +49,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+  adduser --system --uid 1001 nextjs
 
 # Copy standalone output
 COPY --from=builder /app/public ./public
@@ -62,7 +62,10 @@ COPY --from=builder /app/src/db ./src/db
 COPY --from=builder /app/package.json ./
 
 # Install drizzle-kit for migrations (production deps already in standalone)
-RUN npm install drizzle-kit postgres drizzle-orm --no-save
+RUN npm install drizzle-kit postgres drizzle-orm
+
+# Copy node_modules binaries so start.sh can find drizzle-kit
+ENV PATH="/app/node_modules/.bin:$PATH"
 
 # Copy startup script
 COPY start.sh ./
@@ -77,7 +80,7 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=5 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
 
 CMD ["./start.sh"]
