@@ -148,7 +148,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                     }
                 } catch (error) {
                     console.error('[auth] Error in Google signIn callback:', error);
-                    return false;
+                    console.error('[auth] DATABASE_URL set:', !!process.env.DATABASE_URL);
+                    // Allow sign-in even if DB is unreachable — JWT session still works
+                    // User will be created in DB on next successful connection
+                    return true;
                 }
             }
             return true;
