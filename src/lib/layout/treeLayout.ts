@@ -86,15 +86,14 @@ export function calculateSimplePosition(
 }
 
 // Layout Constants for full dagre layout
-const SPOUSE_GAP = 80;    // Gap between spouses (wide for Bugis tree style)
+const SPOUSE_GAP = 60;    // Gap between spouses
 
 // Dynamic spacing based on tree size
 function getLayoutSpacing(personCount: number) {
-    // Scale spacing up for larger trees to reduce overlap
-    const scale = Math.min(personCount / 50, 1); // 0..1 based on tree size
+    const scale = Math.min(personCount / 50, 1);
     return {
-        rankSep: Math.round(220 + scale * 130),   // 220–350 vertical gap between generations
-        nodeSep: Math.round(140 + scale * 80),     // 140–220 horizontal gap between clusters
+        rankSep: Math.round(120 + scale * 60),    // 120–180 vertical gap between generations
+        nodeSep: Math.round(80 + scale * 60),      // 80–140 horizontal gap between clusters
     };
 }
 

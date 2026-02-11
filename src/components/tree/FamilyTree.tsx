@@ -295,17 +295,42 @@ export function FamilyTree({
         'from-cyan-100 to-cyan-50 border-cyan-300',       // Gen 8+
     ];
 
-    // Calculate connections based on current positions — smooth Bezier curves
+    // Calculate connections — clean straight lines, triangle-aware endpoints
     const connections = useMemo(() => {
         const connLines: Array<{ id: string; d: string; color: string; type: 'spouse' | 'parent-child' | 'vertical-drop' | 'marriage-dot' }> = [];
         const drawnPairs = new Set<string>();
-        const coupleConnectors = new Map<string, { centerX: number; centerY: number; bottomY: number }>();
 
-        const shapeCenterY = SHAPE_SIZE / 2;
-        const THEME_GREEN = '#0d9488'; // Teal-600 — main theme color
-        const THEME_GREEN_LIGHT = '#14b8a6'; // Teal-500 — spouse/marriage
+        const THEME_TEAL = '#0d9488'; // Teal-600 for all connections
 
-        // First pass: Draw spouse connections (smooth arc)
+        // Triangle geometry (viewBox 0 0 56 56, points: "28,50 4,10 52,10")
+        const TRI_TOP = 10;   // Top edge Y in 56px shape
+        const TRI_BOTTOM = 50; // Bottom tip Y in 56px shape
+
+        // Helper: Get shape bottom Y (where parent lines drop FROM)
+        const getShapeBottom = (pos: { x: number; y: number }, personId: string): number => {
+            const person = personsMap.get(personId);
+            if (person?.gender === 'female') return pos.y + TRI_BOTTOM;
+            return pos.y + SHAPE_SIZE; // Circle bottom
+        };
+
+        // Helper: Get shape top Y (where child lines arrive TO)
+        const getShapeTop = (pos: { x: number; y: number }, personId: string): number => {
+            const person = personsMap.get(personId);
+            if (person?.gender === 'female') return pos.y + TRI_TOP;
+            return pos.y; // Circle top
+        };
+
+        // Helper: Get shape center Y  
+        const getShapeCenter = (pos: { x: number; y: number }, personId: string): number => {
+            const person = personsMap.get(personId);
+            if (person?.gender === 'female') return pos.y + (TRI_TOP + TRI_BOTTOM) / 2;
+            return pos.y + SHAPE_SIZE / 2;
+        };
+
+        // Track couple midpoints for parent-child connections
+        const coupleDropPoints = new Map<string, { x: number; y: number }>();
+
+        // First pass: Spouse connections (straight line between shape edges)
         persons.forEach(person => {
             const pos1 = positions.get(person.personId);
             if (!pos1) return;
@@ -318,41 +343,32 @@ export function FamilyTree({
                 const pos2 = positions.get(spouseId);
                 if (!pos2) return;
 
+                const leftId = pos1.x < pos2.x ? person.personId : spouseId;
+                const rightId = pos1.x < pos2.x ? spouseId : person.personId;
                 const leftPos = pos1.x < pos2.x ? pos1 : pos2;
                 const rightPos = pos1.x < pos2.x ? pos2 : pos1;
 
-                // Connect from shape edge to shape edge
-                const y1 = leftPos.y + shapeCenterY;
-                const y2 = rightPos.y + shapeCenterY;
+                const y1 = getShapeCenter(leftPos, leftId);
+                const y2 = getShapeCenter(rightPos, rightId);
                 const x1 = leftPos.x + NODE_WIDTH / 2 + SHAPE_SIZE / 2 + 2;
                 const x2 = rightPos.x + NODE_WIDTH / 2 - SHAPE_SIZE / 2 - 2;
 
-                // Smooth line between spouses
                 connLines.push({
                     id: `spouse-${key}`,
                     d: `M ${x1} ${y1} L ${x2} ${y2}`,
-                    color: THEME_GREEN_LIGHT,
+                    color: THEME_TEAL,
                     type: 'spouse'
                 });
 
-                // Marriage dot at midpoint
-                const centerX = (leftPos.x + rightPos.x + NODE_WIDTH) / 2;
-                const centerY = (y1 + y2) / 2;
-                connLines.push({
-                    id: `marriage-dot-${key}`,
-                    d: `M ${centerX} ${centerY} m -5,0 a 5,5 0 1,0 10,0 a 5,5 0 1,0 -10,0`,
-                    color: THEME_GREEN_LIGHT,
-                    type: 'marriage-dot'
-                });
-
-                // Store for child connections
+                // Store couple drop point (midpoint, below both shapes)
                 const coupleKey = [person.personId, spouseId].sort().join('-');
-                const bottomY = Math.max(leftPos.y, rightPos.y) + SHAPE_SIZE + 4;
-                coupleConnectors.set(coupleKey, { centerX, centerY, bottomY });
+                const midX = (x1 + x2) / 2;
+                const bottomY = Math.max(getShapeBottom(leftPos, leftId), getShapeBottom(rightPos, rightId));
+                coupleDropPoints.set(coupleKey, { x: midX, y: bottomY });
             });
         });
 
-        // Second pass: Draw parent-child connections as smooth Bezier curves
+        // Second pass: Parent-child connections (straight lines)
         const childrenByParentPair = new Map<string, string[]>();
 
         persons.forEach(person => {
@@ -373,50 +389,45 @@ export function FamilyTree({
             const validParentIds = parentIds.filter(pid => positions.has(pid) && personsMap.has(pid));
             if (validParentIds.length === 0) return;
 
-            const firstParentPos = positions.get(validParentIds[0])!;
-
-            // Find parent drop point (bottom of parent shape or marriage dot)
+            // Find drop point (couple midpoint or single parent bottom)
             let dropX: number;
-            let dropStartY: number;
+            let dropY: number;
 
             if (validParentIds.length >= 2) {
                 const coupleKey = validParentIds.slice(0, 2).sort().join('-');
-                const connector = coupleConnectors.get(coupleKey);
-                if (connector) {
-                    dropX = connector.centerX;
-                    dropStartY = connector.centerY;
+                const coupeDrop = coupleDropPoints.get(coupleKey);
+                if (coupeDrop) {
+                    dropX = coupeDrop.x;
+                    dropY = coupeDrop.y;
                 } else {
-                    const parent2Pos = positions.get(validParentIds[1]);
-                    if (parent2Pos) {
-                        dropX = (firstParentPos.x + parent2Pos.x + NODE_WIDTH) / 2;
-                        dropStartY = Math.max(firstParentPos.y, parent2Pos.y) + shapeCenterY;
+                    const p1 = positions.get(validParentIds[0])!;
+                    const p2 = positions.get(validParentIds[1]);
+                    if (p2) {
+                        dropX = (p1.x + p2.x + NODE_WIDTH) / 2;
+                        dropY = Math.max(getShapeBottom(p1, validParentIds[0]), getShapeBottom(p2, validParentIds[1]));
                     } else {
-                        dropX = firstParentPos.x + NODE_WIDTH / 2;
-                        dropStartY = firstParentPos.y + SHAPE_SIZE;
+                        dropX = p1.x + NODE_WIDTH / 2;
+                        dropY = getShapeBottom(p1, validParentIds[0]);
                     }
                 }
             } else {
-                dropX = firstParentPos.x + NODE_WIDTH / 2;
-                dropStartY = firstParentPos.y + SHAPE_SIZE;
+                const p1 = positions.get(validParentIds[0])!;
+                dropX = p1.x + NODE_WIDTH / 2;
+                dropY = getShapeBottom(p1, validParentIds[0]);
             }
 
-            // Each child gets a smooth S-curve from parent drop point
+            // Draw a straight line from parent drop to each child's shape top
             childIds.forEach(childId => {
                 const childPos = positions.get(childId);
                 if (!childPos) return;
 
                 const childCenterX = childPos.x + NODE_WIDTH / 2;
-                const childTop = childPos.y;
-
-                // Smooth cubic Bezier: parent bottom → child top
-                const dy = childTop - dropStartY;
-                const controlY1 = dropStartY + dy * 0.5;
-                const controlY2 = childTop - dy * 0.5;
+                const childTopY = getShapeTop(childPos, childId);
 
                 connLines.push({
-                    id: `child-curve-${childId}`,
-                    d: `M ${dropX} ${dropStartY} C ${dropX} ${controlY1}, ${childCenterX} ${controlY2}, ${childCenterX} ${childTop}`,
-                    color: THEME_GREEN,
+                    id: `child-line-${childId}`,
+                    d: `M ${dropX} ${dropY} L ${childCenterX} ${childTopY}`,
+                    color: THEME_TEAL,
                     type: 'parent-child'
                 });
             });
