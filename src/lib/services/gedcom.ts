@@ -453,6 +453,31 @@ export async function importGedcom(
             .where(eq(persons.id, personId));
     }
 
+    // ── Auto-detect root ancestor ──
+    // Find the person with no parents who has the most descendants
+    const personsWithNoParents = Array.from(xrefToId.values()).filter(
+        pid => !parentMap.has(pid) || parentMap.get(pid)!.size === 0
+    );
+
+    if (personsWithNoParents.length > 0) {
+        // Pick the one with most children (likely the oldest generation)
+        let bestRootId = personsWithNoParents[0];
+        let maxChildren = 0;
+
+        for (const pid of personsWithNoParents) {
+            const childCount = childMap.has(pid) ? childMap.get(pid)!.size : 0;
+            if (childCount > maxChildren) {
+                maxChildren = childCount;
+                bestRootId = pid;
+            }
+        }
+
+        // Set isRootAncestor flag
+        await db.update(persons)
+            .set({ isRootAncestor: true })
+            .where(eq(persons.id, bestRootId));
+    }
+
     // Update tree stats
     await db.update(trees)
         .set({

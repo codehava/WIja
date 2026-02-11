@@ -81,6 +81,34 @@ export async function POST(request: NextRequest) {
             updatedCount++;
         }
 
+        // ── Auto-detect root ancestor if not already set ──
+        const treePersons = await db.select().from(persons).where(eq(persons.treeId, treeId));
+        const hasRoot = treePersons.some(p => p.isRootAncestor === true);
+
+        if (!hasRoot) {
+            // Find person with no parents (not in parentMap) and most children
+            const candidates = treePersons.filter(
+                p => !parentMap.has(p.id) || parentMap.get(p.id)!.size === 0
+            );
+
+            if (candidates.length > 0) {
+                let bestRootId = candidates[0].id;
+                let maxChildren = 0;
+
+                for (const c of candidates) {
+                    const childCount = childMap.has(c.id) ? childMap.get(c.id)!.size : 0;
+                    if (childCount > maxChildren) {
+                        maxChildren = childCount;
+                        bestRootId = c.id;
+                    }
+                }
+
+                await db.update(persons)
+                    .set({ isRootAncestor: true })
+                    .where(eq(persons.id, bestRootId));
+            }
+        }
+
         return NextResponse.json({
             message: 'Relationships rebuilt successfully',
             totalRelationships: rels.length,
