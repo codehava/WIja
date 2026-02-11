@@ -85,6 +85,20 @@ export function FamilyTree({
     const [nodePositions, setNodePositions] = useState<Map<string, NodePosition>>(new Map());
     const [isInitialized, setIsInitialized] = useState(false);
 
+    // Track person count to detect GEDCOM imports (large batch additions)
+    const prevPersonCount = useRef(0);
+    useEffect(() => {
+        const currentCount = persons.length;
+        const prevCount = prevPersonCount.current;
+        // If person count increased by 10+ (likely a GEDCOM import), re-layout
+        if (prevCount > 0 && currentCount > prevCount + 10) {
+            initialLayoutRef.current = null;
+            setIsInitialized(false);
+            setHasAutoFitted(false);
+        }
+        prevPersonCount.current = currentCount;
+    }, [persons.length]);
+
     // Dragging state
     const [draggingNode, setDraggingNode] = useState<string | null>(null);
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });

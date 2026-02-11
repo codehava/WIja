@@ -86,9 +86,17 @@ export function calculateSimplePosition(
 }
 
 // Layout Constants for full dagre layout
-const SPOUSE_GAP = 25;    // Gap between spouses
-const RANK_SEP = 160;     // Vertical gap (was 220)
-const NODE_SEP = 80;      // Horizontal gap (was 150)
+const SPOUSE_GAP = 40;    // Gap between spouses (was 25)
+
+// Dynamic spacing based on tree size
+function getLayoutSpacing(personCount: number) {
+    // Scale spacing up for larger trees to reduce overlap
+    const scale = Math.min(personCount / 50, 1); // 0..1 based on tree size
+    return {
+        rankSep: Math.round(180 + scale * 100),   // 180–280 vertical gap between generations
+        nodeSep: Math.round(100 + scale * 80),     // 100–180 horizontal gap between clusters
+    };
+}
 
 export function calculateTreeLayout(
     persons: Person[],
@@ -226,13 +234,17 @@ export function calculateTreeLayout(
     });
 
     // --- 3. Build Dagre Graph ---
+    const { rankSep, nodeSep } = getLayoutSpacing(persons.length);
+
     const g = new dagre.graphlib.Graph();
     g.setGraph({
         rankdir: 'TB',
-        ranksep: RANK_SEP,
-        nodesep: NODE_SEP,
-        marginx: 50,
-        marginy: 50
+        ranksep: rankSep,
+        nodesep: nodeSep,
+        marginx: 80,
+        marginy: 80,
+        ranker: 'longest-path',  // Better generation alignment for family trees
+        align: 'UL',             // Consistent upper-left alignment within ranks
     });
     g.setDefaultEdgeLabel(() => ({}));
 
@@ -304,7 +316,7 @@ export function calculateTreeLayout(
 
             const edgeKey = `${sourceCluster}->${targetCluster}`;
             if (!addedEdges.has(edgeKey)) {
-                g.setEdge(sourceCluster, targetCluster, { weight: 100, minlen: 1 });
+                g.setEdge(sourceCluster, targetCluster, { weight: 2, minlen: 1 });
                 addedEdges.add(edgeKey);
             }
         });
@@ -320,113 +332,57 @@ export function calculateTreeLayout(
         if (n) clusterPositions.set(id, { x: n.x, y: n.y });
     });
 
-    // --- 6. PARENT SIDE ALIGNMENT POST-PROCESSING ---
-    // For each couple (cluster with 2+ members), check each member's parents
-    // and position parent cluster to align with that member's side in the couple
-    // WITH PUSH-APART COLLISION RESOLUTION
+    // --- 6. MULTI-PASS COLLISION RESOLUTION ---
+    // Instead of aggressively moving parents, do gentle multi-pass overlap removal
+    const MIN_GAP = 40;
+    const MAX_PASSES = 5;
 
-    const MIN_GAP = 60; // Minimum gap between clusters
+    for (let pass = 0; pass < MAX_PASSES; pass++) {
+        let hadOverlap = false;
 
-    // Helper: Calculate overlap amount between two clusters at same Y level
-    const getOverlapAmount = (clusterId1: string, x1: number, clusterId2: string): number => {
-        if (clusterId1 === clusterId2) return 0;
-
-        const cluster1 = clusters.get(clusterId1);
-        const pos2 = clusterPositions.get(clusterId2);
-        const cluster2 = clusters.get(clusterId2);
-
-        if (!cluster1 || !pos2 || !cluster2) return 0;
-
-        // Check Y level - only care about same generation
-        const pos1 = clusterPositions.get(clusterId1);
-        if (!pos1 || Math.abs(pos1.y - pos2.y) > 10) return 0;
-
-        // Calculate bounding boxes
-        const left1 = x1 - cluster1.w / 2;
-        const right1 = x1 + cluster1.w / 2;
-        const left2 = pos2.x - cluster2.w / 2;
-        const right2 = pos2.x + cluster2.w / 2;
-
-        // Check for overlap
-        if (right1 + MIN_GAP < left2 || right2 + MIN_GAP < left1) {
-            return 0; // No overlap
+        // Group clusters by Y level (same generation)
+        const byRank = new Map<number, string[]>();
+        for (const [id, pos] of clusterPositions) {
+            const roundedY = Math.round(pos.y / 10) * 10; // Bucket by ~10px
+            if (!byRank.has(roundedY)) byRank.set(roundedY, []);
+            byRank.get(roundedY)!.push(id);
         }
 
-        // Calculate overlap amount
-        if (x1 < pos2.x) {
-            // cluster1 is on left, needs to push cluster2 right
-            return (right1 + MIN_GAP) - left2;
-        } else {
-            // cluster1 is on right, needs to push cluster2 left
-            return (right2 + MIN_GAP) - left1;
-        }
-    };
+        // For each generation row, resolve overlaps left-to-right
+        for (const [, ids] of byRank) {
+            if (ids.length < 2) continue;
 
-    clusters.forEach((data, clusterId) => {
-        if (!clustersInGraph.has(clusterId)) return;
-        if (data.members.length < 2) return; // Only process actual couples
+            // Sort by X position
+            ids.sort((a, b) => (clusterPositions.get(a)?.x ?? 0) - (clusterPositions.get(b)?.x ?? 0));
 
-        const clusterPos = clusterPositions.get(clusterId);
-        if (!clusterPos) return;
+            for (let i = 0; i < ids.length - 1; i++) {
+                const idA = ids[i];
+                const idB = ids[i + 1];
+                const posA = clusterPositions.get(idA);
+                const posB = clusterPositions.get(idB);
+                const clusterA = clusters.get(idA);
+                const clusterB = clusters.get(idB);
 
-        data.members.forEach((member, memberIndex) => {
-            // Calculate member's center X within the cluster
-            const memberCenterX = clusterPos.x - (data.w / 2) +
-                (memberIndex * (NODE_WIDTH + SPOUSE_GAP)) +
-                (NODE_WIDTH / 2);
+                if (!posA || !posB || !clusterA || !clusterB) continue;
 
-            // Find this member's parents that have a cluster in the graph
-            member.relationships.parentIds.forEach(parentId => {
-                const parentClusterId = personToCluster.get(parentId);
-                if (!parentClusterId || !clustersInGraph.has(parentClusterId)) return;
+                const rightEdgeA = posA.x + clusterA.w / 2;
+                const leftEdgeB = posB.x - clusterB.w / 2;
+                const overlap = rightEdgeA + MIN_GAP - leftEdgeB;
 
-                const parentClusterPos = clusterPositions.get(parentClusterId);
-                if (!parentClusterPos) return;
-
-                // Check if parent cluster is actually ABOVE this cluster
-                if (parentClusterPos.y >= clusterPos.y) return;
-
-                const parentCluster = clusters.get(parentClusterId);
-                if (!parentCluster) return;
-
-                // Check how many child clusters this parent cluster connects to
-                let childClusterCount = 0;
-                parentCluster.members.forEach(pm => {
-                    pm.relationships.childIds.forEach(pcid => {
-                        const childCluster = personToCluster.get(pcid);
-                        if (childCluster && clustersInGraph.has(childCluster)) {
-                            childClusterCount++;
-                        }
-                    });
-                });
-
-                // Only attempt alignment if parent has few child connections
-                if (childClusterCount <= 2) {
-                    // First, move parent to target position
-                    parentClusterPos.x = memberCenterX;
-                    clusterPositions.set(parentClusterId, parentClusterPos);
-
-                    // Then, push apart any colliding clusters
-                    for (const [otherClusterId, otherPos] of clusterPositions) {
-                        if (otherClusterId === parentClusterId) continue;
-
-                        const overlap = getOverlapAmount(parentClusterId, memberCenterX, otherClusterId);
-                        if (overlap > 0) {
-                            // Push the other cluster away
-                            if (otherPos.x > memberCenterX) {
-                                // Other is on right, push it further right
-                                otherPos.x += overlap;
-                            } else {
-                                // Other is on left, push it further left
-                                otherPos.x -= overlap;
-                            }
-                            clusterPositions.set(otherClusterId, otherPos);
-                        }
-                    }
+                if (overlap > 0) {
+                    hadOverlap = true;
+                    // Push apart equally (each moves half)
+                    const shift = overlap / 2;
+                    posA.x -= shift;
+                    posB.x += shift;
+                    clusterPositions.set(idA, posA);
+                    clusterPositions.set(idB, posB);
                 }
-            });
-        });
-    });
+            }
+        }
+
+        if (!hadOverlap) break; // Converged
+    }
 
     // --- 6.5. SIBLING REORDERING POST-PROCESSING ---
     // Sort child clusters by birthDate/birthOrder (eldest left, youngest right)
@@ -550,7 +506,7 @@ export function calculateTreeLayout(
                     y: orphansY
                 });
             });
-            orphanCurrentX += data.w + NODE_SEP;
+            orphanCurrentX += data.w + nodeSep;
         }
     });
 
