@@ -46,8 +46,9 @@ export async function POST(request: NextRequest) {
         });
     } catch (error) {
         console.error('GEDCOM import error:', error);
+        const message = error instanceof Error ? error.message : 'Failed to import GEDCOM file';
         return NextResponse.json(
-            { error: 'Failed to import GEDCOM file' },
+            { error: message },
             { status: 500 }
         );
     }

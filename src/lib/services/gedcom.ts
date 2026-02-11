@@ -331,6 +331,11 @@ export async function importGedcom(
     const famRecords = records.filter(r => r.tag === 'FAM');
     let relCount = 0;
 
+    // Collect denormalized relationship IDs for batch update
+    const spouseMap = new Map<string, Set<string>>();   // personId → Set of spouse IDs
+    const parentMap = new Map<string, Set<string>>();    // childId → Set of parent IDs
+    const childMap = new Map<string, Set<string>>();     // parentId → Set of child IDs
+
     for (const rec of famRecords) {
         const parsed = extractFamily(rec);
         const husbId = parsed.husbandXref ? xrefToId.get(parsed.husbandXref) : undefined;
@@ -355,12 +360,11 @@ export async function importGedcom(
             });
             relCount++;
 
-            // Update denormalized spouse IDs
-            await db.update(persons)
-                .set({
-                    spouseIds: db.select({ spouseIds: persons.spouseIds }).from(persons).where(eq(persons.id, husbId)) as any,
-                })
-                .where(eq(persons.id, husbId));
+            // Track spouse IDs for denormalization
+            if (!spouseMap.has(husbId)) spouseMap.set(husbId, new Set());
+            if (!spouseMap.has(wifeId)) spouseMap.set(wifeId, new Set());
+            spouseMap.get(husbId)!.add(wifeId);
+            spouseMap.get(wifeId)!.add(husbId);
         }
 
         // Create parent-child relationships
@@ -380,6 +384,12 @@ export async function importGedcom(
                     person2Id: childId,
                 });
                 relCount++;
+
+                // Track parent/child for denormalization
+                if (!parentMap.has(childId)) parentMap.set(childId, new Set());
+                parentMap.get(childId)!.add(husbId);
+                if (!childMap.has(husbId)) childMap.set(husbId, new Set());
+                childMap.get(husbId)!.add(childId);
             }
 
             // Mother → child
@@ -393,6 +403,12 @@ export async function importGedcom(
                     person2Id: childId,
                 });
                 relCount++;
+
+                // Track parent/child for denormalization
+                if (!parentMap.has(childId)) parentMap.set(childId, new Set());
+                parentMap.get(childId)!.add(wifeId);
+                if (!childMap.has(wifeId)) childMap.set(wifeId, new Set());
+                childMap.get(wifeId)!.add(childId);
             }
 
             // Update child's birth order
@@ -400,6 +416,41 @@ export async function importGedcom(
                 .set({ birthOrder: i + 1 })
                 .where(eq(persons.id, childId));
         }
+    }
+
+    // ── Compute sibling IDs ──
+    // Children of the same parent set are siblings
+    const siblingMap = new Map<string, Set<string>>();
+    for (const [, children] of childMap) {
+        const childArray = Array.from(children);
+        for (const child of childArray) {
+            if (!siblingMap.has(child)) siblingMap.set(child, new Set());
+            for (const sibling of childArray) {
+                if (sibling !== child) {
+                    siblingMap.get(child)!.add(sibling);
+                }
+            }
+        }
+    }
+
+    // ── Batch update denormalized JSONB arrays on persons ──
+    const allPersonIds = new Set([
+        ...spouseMap.keys(),
+        ...parentMap.keys(),
+        ...childMap.keys(),
+        ...siblingMap.keys(),
+    ]);
+
+    for (const personId of allPersonIds) {
+        const updates: Record<string, string[]> = {};
+        if (spouseMap.has(personId)) updates.spouseIds = Array.from(spouseMap.get(personId)!);
+        if (parentMap.has(personId)) updates.parentIds = Array.from(parentMap.get(personId)!);
+        if (childMap.has(personId)) updates.childIds = Array.from(childMap.get(personId)!);
+        if (siblingMap.has(personId)) updates.siblingIds = Array.from(siblingMap.get(personId)!);
+
+        await db.update(persons)
+            .set(updates)
+            .where(eq(persons.id, personId));
     }
 
     // Update tree stats
