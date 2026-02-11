@@ -92,7 +92,7 @@ const SPOUSE_GAP = 60;    // Gap between spouses
 function getLayoutSpacing(personCount: number) {
     const scale = Math.min(personCount / 50, 1);
     return {
-        rankSep: Math.round(120 + scale * 60),    // 120–180 vertical gap between generations
+        rankSep: Math.round(140 + scale * 60),    // 140–200 vertical gap between generations
         nodeSep: Math.round(80 + scale * 60),      // 80–140 horizontal gap between clusters
     };
 }
@@ -242,8 +242,8 @@ export function calculateTreeLayout(
         nodesep: nodeSep,
         marginx: 80,
         marginy: 80,
-        ranker: 'longest-path',  // Better generation alignment for family trees
-        align: 'UL',             // Consistent upper-left alignment within ranks
+        ranker: 'network-simplex',  // Best for structured hierarchies — centers children below parents
+        align: 'DL',                // Down-left alignment for tighter grouping
     });
     g.setDefaultEdgeLabel(() => ({}));
 

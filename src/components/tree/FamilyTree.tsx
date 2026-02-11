@@ -416,7 +416,7 @@ export function FamilyTree({
                 dropY = getShapeBottom(p1, validParentIds[0]);
             }
 
-            // Draw a straight line from parent drop to each child's shape top
+            // Draw smooth Bezier curve from parent drop to each child's shape top
             childIds.forEach(childId => {
                 const childPos = positions.get(childId);
                 if (!childPos) return;
@@ -424,9 +424,16 @@ export function FamilyTree({
                 const childCenterX = childPos.x + NODE_WIDTH / 2;
                 const childTopY = getShapeTop(childPos, childId);
 
+                // Controlled cubic Bezier: starts going straight down, then curves into child
+                const dy = Math.abs(childTopY - dropY);
+                const cp1x = dropX;                    // Control point 1: directly below parent
+                const cp1y = dropY + dy * 0.5;         // Halfway down
+                const cp2x = childCenterX;             // Control point 2: directly above child
+                const cp2y = childTopY - dy * 0.3;     // 30% up from child
+
                 connLines.push({
-                    id: `child-line-${childId}`,
-                    d: `M ${dropX} ${dropY} L ${childCenterX} ${childTopY}`,
+                    id: `child-curve-${childId}`,
+                    d: `M ${dropX} ${dropY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${childCenterX} ${childTopY}`,
                     color: THEME_TEAL,
                     type: 'parent-child'
                 });
