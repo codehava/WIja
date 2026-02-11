@@ -346,7 +346,7 @@ export function FamilyTree({
                 connLines.push({
                     id: `spouse-${key}`,
                     d: `M ${x1} ${y1} C ${x1 + controlOffset} ${y1}, ${x2 - controlOffset} ${y2}, ${x2} ${y2}`,
-                    color: '#f472b6',
+                    color: '#ec4899',
                     type: 'spouse'
                 });
 
@@ -434,7 +434,7 @@ export function FamilyTree({
                 connLines.push({
                     id: `child-curve-${child.id}`,
                     d: `M ${dropX} ${dropStartY} C ${dropX} ${controlY1}, ${childCenterX} ${controlY2}, ${childCenterX} ${childTop}`,
-                    color: '#78716c',
+                    color: '#44403c',
                     type: 'parent-child'
                 });
             });
@@ -1099,12 +1099,28 @@ export function FamilyTree({
                                 d={conn.d}
                                 fill="none"
                                 stroke={conn.color}
-                                strokeWidth={conn.type === 'spouse' ? 3 : 2}
+                                strokeWidth={conn.type === 'spouse' ? 3.5 : 2.5}
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
-                                strokeDasharray={conn.type === 'spouse' ? '0' : '0'}
+                                opacity={conn.type === 'spouse' ? 1 : 0.85}
                             />
                         ))}
+                        {/* Connection dots at parent drop points */}
+                        {connections.filter(c => c.type === 'parent-child').map(conn => {
+                            // Extract the start point (M x y) from path
+                            const match = conn.d.match(/^M\s+([\d.]+)\s+([\d.]+)/);
+                            if (!match) return null;
+                            return (
+                                <circle
+                                    key={`dot-${conn.id}`}
+                                    cx={parseFloat(match[1])}
+                                    cy={parseFloat(match[2])}
+                                    r={4}
+                                    fill="#44403c"
+                                    opacity={0.7}
+                                />
+                            );
+                        })}
                     </svg>
 
                     {/* Person Nodes - VIRTUALIZED: only render visible */}
