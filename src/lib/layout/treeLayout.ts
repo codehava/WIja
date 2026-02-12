@@ -90,16 +90,16 @@ const SPOUSE_GAP = 60;    // Gap between spouses
 
 // Dynamic spacing based on tree size
 function getLayoutSpacing(personCount: number) {
-    // For large trees, tighten spacing to keep the layout compact
+    // Compact spacing — close enough to see relationships, far enough to avoid overlap
     if (personCount > 150) {
-        return { rankSep: 180, nodeSep: 100 };
+        return { rankSep: 130, nodeSep: 70 };
     } else if (personCount > 80) {
-        return { rankSep: 170, nodeSep: 110 };
+        return { rankSep: 140, nodeSep: 80 };
     } else {
         const scale = Math.min(personCount / 50, 1);
         return {
-            rankSep: Math.round(150 + scale * 40),   // 150–190 vertical gap
-            nodeSep: Math.round(90 + scale * 40),    // 90–130 horizontal gap
+            rankSep: Math.round(120 + scale * 30),   // 120–150 vertical gap
+            nodeSep: Math.round(60 + scale * 30),    // 60–90 horizontal gap
         };
     }
 }

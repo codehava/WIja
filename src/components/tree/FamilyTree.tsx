@@ -390,8 +390,29 @@ export function FamilyTree({
 
                 const y1 = getShapeCenter(leftPos, leftId);
                 const y2 = getShapeCenter(rightPos, rightId);
-                const x1 = leftPos.x + NODE_WIDTH / 2 + SHAPE_SIZE / 2 + 2;
-                const x2 = rightPos.x + NODE_WIDTH / 2 - SHAPE_SIZE / 2 - 2;
+                // For spouse line endpoints, we need the edge of each shape
+                // Circle: center ± SHAPE_SIZE/2
+                // Triangle: for the left-pointing edge we use the triangle's actual width at the center height
+                const leftPerson = personsMap.get(leftId);
+                const rightPerson = personsMap.get(rightId);
+
+                // Get the right edge X of the left person's shape
+                let x1: number;
+                if (leftPerson?.gender === 'female') {
+                    // Triangle points: top-left(4,10) top-right(52,10) bottom(28,50)
+                    // At center Y the triangle is about 40px wide from center
+                    x1 = leftPos.x + NODE_WIDTH / 2 + SHAPE_SIZE / 2;
+                } else {
+                    x1 = leftPos.x + NODE_WIDTH / 2 + SHAPE_SIZE / 2 + 2;
+                }
+
+                // Get the left edge X of the right person's shape  
+                let x2: number;
+                if (rightPerson?.gender === 'female') {
+                    x2 = rightPos.x + NODE_WIDTH / 2 - SHAPE_SIZE / 2;
+                } else {
+                    x2 = rightPos.x + NODE_WIDTH / 2 - SHAPE_SIZE / 2 - 2;
+                }
 
                 connLines.push({
                     id: `spouse-${key}`,
@@ -464,12 +485,16 @@ export function FamilyTree({
                 const childCenterX = childPos.x + NODE_WIDTH / 2;
                 const childTopY = getShapeTop(childPos, childId);
 
-                // Controlled cubic Bezier: starts going straight down, then curves into child
+                // Smooth Bezier: goes straight down from parent, then curves gently into child
                 const dy = Math.abs(childTopY - dropY);
-                const cp1x = dropX;                    // Control point 1: directly below parent
-                const cp1y = dropY + dy * 0.5;         // Halfway down
-                const cp2x = childCenterX;             // Control point 2: directly above child
-                const cp2y = childTopY - dy * 0.3;     // 30% up from child
+                const dx = Math.abs(childCenterX - dropX);
+
+                // Control point 1: straight down from parent (vertical start)
+                const cp1x = dropX;
+                const cp1y = dropY + dy * 0.6;
+                // Control point 2: above child, easing in horizontally 
+                const cp2x = childCenterX;
+                const cp2y = dropY + dy * 0.4;
 
                 connLines.push({
                     id: `child-curve-${childId}`,
@@ -1088,7 +1113,7 @@ export function FamilyTree({
             <div className="fixed bottom-44 right-4 z-30 text-xs bg-white/90 px-3 py-2 rounded-lg shadow border border-stone-200 print:hidden">
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1">
-                        <div className="w-4 h-0.5 bg-pink-500" style={{ borderTop: '2px dashed #ec4899' }}></div>
+                        <div className="w-4 h-0.5 bg-pink-500"></div>
                         <span className="text-stone-500">Pasangan</span>
                     </div>
                     <div className="flex items-center gap-1">
@@ -1163,7 +1188,7 @@ export function FamilyTree({
                                 }
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
-                                strokeDasharray={conn.type === 'spouse' ? '6,4' : undefined}
+                                strokeDasharray={undefined}
                                 opacity={conn.type === 'marriage-dot' ? 0.9 : 0.65}
                             />
                         ))}
@@ -1264,8 +1289,8 @@ export function FamilyTree({
                                         <div className="text-center w-full px-1">
                                             {(scriptMode === 'latin' || scriptMode === 'both') && (
                                                 <div className={`font-medium leading-tight text-stone-700 ${zoom < 0.5
-                                                        ? 'text-[10px] truncate'
-                                                        : displayName.length > 25 ? 'text-[10px]' : 'text-xs'
+                                                    ? 'text-[10px] truncate'
+                                                    : displayName.length > 25 ? 'text-[10px]' : 'text-xs'
                                                     }`}>
                                                     {zoom < 0.5
                                                         ? (person.firstName || displayName.split(' ')[0])
