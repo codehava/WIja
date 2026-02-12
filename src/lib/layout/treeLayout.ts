@@ -85,22 +85,19 @@ export function calculateSimplePosition(
     };
 }
 
-// Layout Constants for full dagre layout
-const SPOUSE_GAP = 60;    // Gap between spouses
-
-// Dynamic spacing based on tree size
-function getLayoutSpacing(personCount: number) {
-    // Compact spacing — close enough to see relationships, far enough to avoid overlap
-    if (personCount > 150) {
-        return { rankSep: 130, nodeSep: 70 };
-    } else if (personCount > 80) {
-        return { rankSep: 140, nodeSep: 80 };
+// Dynamic layout constants based on tree size
+function getLayoutConfig(personCount: number) {
+    if (personCount > 200) {
+        // Ultra-compact for very large trees
+        return { rankSep: 80, nodeSep: 25, spouseGap: 20, margin: 30, minGap: 15, orphanGap: 120 };
+    } else if (personCount > 100) {
+        // Compact for large trees
+        return { rankSep: 100, nodeSep: 40, spouseGap: 35, margin: 50, minGap: 25, orphanGap: 150 };
+    } else if (personCount > 50) {
+        return { rankSep: 120, nodeSep: 55, spouseGap: 45, margin: 60, minGap: 30, orphanGap: 180 };
     } else {
-        const scale = Math.min(personCount / 50, 1);
-        return {
-            rankSep: Math.round(120 + scale * 30),   // 120–150 vertical gap
-            nodeSep: Math.round(60 + scale * 30),    // 60–90 horizontal gap
-        };
+        // Comfortable spacing for small trees
+        return { rankSep: 140, nodeSep: 70, spouseGap: 60, margin: 80, minGap: 40, orphanGap: 250 };
     }
 }
 
@@ -149,6 +146,7 @@ export function calculateTreeLayout(
     }
 
     const visiblePersons = persons.filter(p => visibleIds.has(p.personId));
+    const config = getLayoutConfig(persons.length);
 
     // --- 2. Cluster Spouses ---
     const personToCluster = new Map<string, string>();
@@ -235,12 +233,11 @@ export function calculateTreeLayout(
             });
         }
 
-        const width = (members.length * NODE_WIDTH) + ((members.length - 1) * SPOUSE_GAP);
+        const width = (members.length * NODE_WIDTH) + ((members.length - 1) * config.spouseGap);
         clusters.set(clusterId, { members, w: width, h: NODE_HEIGHT });
     });
 
     // --- 3. Build Dagre Graph ---
-    const { rankSep, nodeSep } = getLayoutSpacing(persons.length);
 
     const g = new dagre.graphlib.Graph();
     // Use tight-tree ranker for large trees (significantly fewer edge crossings)
@@ -248,10 +245,10 @@ export function calculateTreeLayout(
     const useRanker = persons.length > 80 ? 'tight-tree' : 'network-simplex';
     g.setGraph({
         rankdir: 'TB',
-        ranksep: rankSep,
-        nodesep: nodeSep,
-        marginx: 80,
-        marginy: 80,
+        ranksep: config.rankSep,
+        nodesep: config.nodeSep,
+        marginx: config.margin,
+        marginy: config.margin,
         ranker: useRanker,
         align: 'UL',               // Up-left alignment for better top-down centering
     });
@@ -343,7 +340,7 @@ export function calculateTreeLayout(
 
     // --- 6. MULTI-PASS COLLISION RESOLUTION ---
     // More passes for larger trees, dynamic gap based on tree size
-    const MIN_GAP = persons.length > 100 ? 30 : 40;
+    const MIN_GAP = config.minGap;
     const MAX_PASSES = persons.length > 100 ? 15 : 8;
 
     for (let pass = 0; pass < MAX_PASSES; pass++) {
@@ -600,7 +597,7 @@ export function calculateTreeLayout(
         const startX = centerPos.x - (data.w / 2);
 
         data.members.forEach((member, index) => {
-            const memberX = startX + (index * (NODE_WIDTH + SPOUSE_GAP));
+            const memberX = startX + (index * (NODE_WIDTH + config.spouseGap));
             posMap.set(member.personId, {
                 x: memberX,
                 y: centerPos.y - (NODE_HEIGHT / 2)
@@ -609,7 +606,7 @@ export function calculateTreeLayout(
     });
 
     // --- 8. Handle Orphans --- place in a grid instead of single row
-    const orphansY = currentMaxY + 250;
+    const orphansY = currentMaxY + config.orphanGap;
     let orphanCurrentX = 50;
     let orphanRow = 0;
     const MAX_ORPHANS_PER_ROW = 8;
@@ -620,13 +617,13 @@ export function calculateTreeLayout(
             const startX = orphanCurrentX;
             const rowY = orphansY + orphanRow * (NODE_HEIGHT + 80);
             data.members.forEach((member, index) => {
-                const memberX = startX + (index * (NODE_WIDTH + SPOUSE_GAP));
+                const memberX = startX + (index * (NODE_WIDTH + config.spouseGap));
                 posMap.set(member.personId, {
                     x: memberX,
                     y: rowY
                 });
             });
-            orphanCurrentX += data.w + nodeSep;
+            orphanCurrentX += data.w + config.nodeSep;
             orphansInCurrentRow++;
             if (orphansInCurrentRow >= MAX_ORPHANS_PER_ROW) {
                 orphanCurrentX = 50;
