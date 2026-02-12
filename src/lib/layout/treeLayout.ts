@@ -85,21 +85,15 @@ export function calculateSimplePosition(
     };
 }
 
-// Dynamic layout constants based on tree size
-function getLayoutConfig(personCount: number) {
-    if (personCount > 200) {
-        // Ultra-compact for very large trees
-        return { rankSep: 80, nodeSep: 25, spouseGap: 20, margin: 30, minGap: 15, orphanGap: 120 };
-    } else if (personCount > 100) {
-        // Compact for large trees
-        return { rankSep: 100, nodeSep: 40, spouseGap: 35, margin: 50, minGap: 25, orphanGap: 150 };
-    } else if (personCount > 50) {
-        return { rankSep: 120, nodeSep: 55, spouseGap: 45, margin: 60, minGap: 30, orphanGap: 180 };
-    } else {
-        // Comfortable spacing for small trees
-        return { rankSep: 140, nodeSep: 70, spouseGap: 60, margin: 80, minGap: 40, orphanGap: 250 };
-    }
-}
+// Standardized layout spacing — consistent regardless of tree size
+const LAYOUT_CONFIG = {
+    rankSep: 100,     // Vertical gap between generations
+    nodeSep: 40,      // Horizontal gap between sibling clusters
+    spouseGap: 30,    // Gap between spouses in a cluster
+    margin: 50,       // Canvas margin
+    minGap: 25,       // Minimum gap for collision resolution
+    orphanGap: 150,   // Gap before orphan section
+};
 
 export function calculateTreeLayout(
     persons: Person[],
@@ -146,7 +140,7 @@ export function calculateTreeLayout(
     }
 
     const visiblePersons = persons.filter(p => visibleIds.has(p.personId));
-    const config = getLayoutConfig(persons.length);
+    const config = LAYOUT_CONFIG;
 
     // --- 2. Cluster Spouses ---
     const personToCluster = new Map<string, string>();
