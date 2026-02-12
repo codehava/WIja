@@ -90,11 +90,18 @@ const SPOUSE_GAP = 60;    // Gap between spouses
 
 // Dynamic spacing based on tree size
 function getLayoutSpacing(personCount: number) {
-    const scale = Math.min(personCount / 50, 1);
-    return {
-        rankSep: Math.round(140 + scale * 60),    // 140–200 vertical gap between generations
-        nodeSep: Math.round(80 + scale * 60),      // 80–140 horizontal gap between clusters
-    };
+    // For large trees, tighten spacing to keep the layout compact
+    if (personCount > 150) {
+        return { rankSep: 180, nodeSep: 100 };
+    } else if (personCount > 80) {
+        return { rankSep: 170, nodeSep: 110 };
+    } else {
+        const scale = Math.min(personCount / 50, 1);
+        return {
+            rankSep: Math.round(150 + scale * 40),   // 150–190 vertical gap
+            nodeSep: Math.round(90 + scale * 40),    // 90–130 horizontal gap
+        };
+    }
 }
 
 export function calculateTreeLayout(
@@ -236,14 +243,17 @@ export function calculateTreeLayout(
     const { rankSep, nodeSep } = getLayoutSpacing(persons.length);
 
     const g = new dagre.graphlib.Graph();
+    // Use tight-tree ranker for large trees (significantly fewer edge crossings)
+    // and network-simplex for smaller trees (better centering)
+    const useRanker = persons.length > 80 ? 'tight-tree' : 'network-simplex';
     g.setGraph({
         rankdir: 'TB',
         ranksep: rankSep,
         nodesep: nodeSep,
         marginx: 80,
         marginy: 80,
-        ranker: 'network-simplex',  // Best for structured hierarchies — centers children below parents
-        align: 'DL',                // Down-left alignment for tighter grouping
+        ranker: useRanker,
+        align: 'UL',               // Up-left alignment for better top-down centering
     });
     g.setDefaultEdgeLabel(() => ({}));
 
@@ -332,9 +342,9 @@ export function calculateTreeLayout(
     });
 
     // --- 6. MULTI-PASS COLLISION RESOLUTION ---
-    // Instead of aggressively moving parents, do gentle multi-pass overlap removal
-    const MIN_GAP = 40;
-    const MAX_PASSES = 5;
+    // More passes for larger trees, dynamic gap based on tree size
+    const MIN_GAP = persons.length > 100 ? 30 : 40;
+    const MAX_PASSES = persons.length > 100 ? 15 : 8;
 
     for (let pass = 0; pass < MAX_PASSES; pass++) {
         let hadOverlap = false;
@@ -471,6 +481,113 @@ export function calculateTreeLayout(
         });
     });
 
+    // --- 6.7. PARENT CENTERING PASS (bottom-up) ---
+    // Center each parent cluster above the midpoint of its children for pyramid look.
+    // Process from deepest generation upward so adjustments cascade.
+    const centeringPasses = 3;
+    for (let cp = 0; cp < centeringPasses; cp++) {
+        const processedForCentering = new Set<string>();
+
+        // Build parent→children map for clusters
+        const parentChildClusters = new Map<string, string[]>();
+        visiblePersons.forEach(person => {
+            const parentClusterId = personToCluster.get(person.personId);
+            if (!parentClusterId || !clustersInGraph.has(parentClusterId)) return;
+            if (processedForCentering.has(parentClusterId)) return;
+            processedForCentering.add(parentClusterId);
+
+            const parentCluster = clusters.get(parentClusterId);
+            if (!parentCluster) return;
+
+            const childClusterIds: string[] = [];
+            parentCluster.members.forEach(member => {
+                member.relationships.childIds.forEach(childId => {
+                    if (!visibleIds.has(childId)) return;
+                    const childClusterId = personToCluster.get(childId);
+                    if (childClusterId && clustersInGraph.has(childClusterId) && !childClusterIds.includes(childClusterId)) {
+                        childClusterIds.push(childClusterId);
+                    }
+                });
+            });
+
+            if (childClusterIds.length > 0) {
+                parentChildClusters.set(parentClusterId, childClusterIds);
+            }
+        });
+
+        // Sort parent clusters by depth (deepest children first = bottom-up)
+        const clusterDepths = new Map<string, number>();
+        const getClusterDepth = (cid: string, visited: Set<string> = new Set()): number => {
+            if (visited.has(cid)) return 0;
+            visited.add(cid);
+            if (clusterDepths.has(cid)) return clusterDepths.get(cid)!;
+            const children = parentChildClusters.get(cid) ?? [];
+            const depth = children.length > 0 ? 1 + Math.max(...children.map(c => getClusterDepth(c, visited))) : 0;
+            clusterDepths.set(cid, depth);
+            return depth;
+        };
+        for (const cid of parentChildClusters.keys()) {
+            getClusterDepth(cid);
+        }
+
+        // Process from shallowest depth to deepest (leaf parents first, then up)
+        const sortedParents = [...parentChildClusters.entries()]
+            .sort(([a], [b]) => (clusterDepths.get(a) ?? 0) - (clusterDepths.get(b) ?? 0));
+
+        for (const [parentCid, childCids] of sortedParents) {
+            const parentPos = clusterPositions.get(parentCid);
+            if (!parentPos) continue;
+
+            // Compute center X of all children
+            let sumX = 0;
+            let count = 0;
+            for (const childCid of childCids) {
+                const childPos = clusterPositions.get(childCid);
+                if (childPos) {
+                    sumX += childPos.x;
+                    count++;
+                }
+            }
+            if (count === 0) continue;
+
+            const childrenCenterX = sumX / count;
+            const desiredX = childrenCenterX;
+
+            // Only move if it doesn't cause collisions with same-rank neighbors
+            const parentY = Math.round(parentPos.y / 10) * 10;
+            const sameRank: string[] = [];
+            for (const [cid, pos] of clusterPositions) {
+                if (cid !== parentCid && Math.round(pos.y / 10) * 10 === parentY) {
+                    sameRank.push(cid);
+                }
+            }
+
+            // Check if desired position would overlap with neighbors
+            const parentCluster = clusters.get(parentCid);
+            if (!parentCluster) continue;
+            const halfW = parentCluster.w / 2;
+            let canMove = true;
+
+            for (const neighborCid of sameRank) {
+                const neighborPos = clusterPositions.get(neighborCid);
+                const neighborCluster = clusters.get(neighborCid);
+                if (!neighborPos || !neighborCluster) continue;
+
+                const neighborHalfW = neighborCluster.w / 2;
+                const distance = Math.abs(desiredX - neighborPos.x);
+                if (distance < halfW + neighborHalfW + MIN_GAP) {
+                    canMove = false;
+                    break;
+                }
+            }
+
+            if (canMove) {
+                parentPos.x = desiredX;
+                clusterPositions.set(parentCid, parentPos);
+            }
+        }
+    }
+
     // --- 7. Expand to Individual Positions ---
     let currentMaxY = 0;
 
@@ -491,21 +608,31 @@ export function calculateTreeLayout(
         });
     });
 
-    // --- 8. Handle Orphans ---
-    const orphansY = currentMaxY + 300;
+    // --- 8. Handle Orphans --- place in a grid instead of single row
+    const orphansY = currentMaxY + 250;
     let orphanCurrentX = 50;
+    let orphanRow = 0;
+    const MAX_ORPHANS_PER_ROW = 8;
+    let orphansInCurrentRow = 0;
 
     clusters.forEach((data, id) => {
         if (!clustersInGraph.has(id)) {
             const startX = orphanCurrentX;
+            const rowY = orphansY + orphanRow * (NODE_HEIGHT + 80);
             data.members.forEach((member, index) => {
                 const memberX = startX + (index * (NODE_WIDTH + SPOUSE_GAP));
                 posMap.set(member.personId, {
                     x: memberX,
-                    y: orphansY
+                    y: rowY
                 });
             });
             orphanCurrentX += data.w + nodeSep;
+            orphansInCurrentRow++;
+            if (orphansInCurrentRow >= MAX_ORPHANS_PER_ROW) {
+                orphanCurrentX = 50;
+                orphanRow++;
+                orphansInCurrentRow = 0;
+            }
         }
     });
 

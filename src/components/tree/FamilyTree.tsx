@@ -295,12 +295,52 @@ export function FamilyTree({
         'from-cyan-100 to-cyan-50 border-cyan-300',       // Gen 8+
     ];
 
+    // Background hex colors for generation bands (semi-transparent)
+    const GENERATION_BAND_COLORS = [
+        'rgba(251, 191, 36, 0.08)',  // Gen 1 - amber
+        'rgba(249, 115, 22, 0.07)',  // Gen 2 - orange
+        'rgba(244, 63, 94, 0.06)',   // Gen 3 - rose
+        'rgba(192, 38, 211, 0.06)', // Gen 4 - fuchsia
+        'rgba(139, 92, 246, 0.06)', // Gen 5 - violet
+        'rgba(99, 102, 241, 0.06)', // Gen 6 - indigo
+        'rgba(14, 165, 233, 0.06)', // Gen 7 - sky
+        'rgba(6, 182, 212, 0.06)',  // Gen 8+ - cyan
+    ];
+
+    // Compute generation bands (horizontal rows for each generation)
+    const generationBands = useMemo(() => {
+        if (generations.size === 0 || positions.size === 0) return [];
+
+        const genRows = new Map<number, { minY: number; maxY: number }>();
+        persons.forEach(p => {
+            const gen = generations.get(p.personId);
+            const pos = positions.get(p.personId);
+            if (gen === undefined || !pos) return;
+            const existing = genRows.get(gen);
+            if (existing) {
+                existing.minY = Math.min(existing.minY, pos.y);
+                existing.maxY = Math.max(existing.maxY, pos.y + NODE_HEIGHT + 30);
+            } else {
+                genRows.set(gen, { minY: pos.y, maxY: pos.y + NODE_HEIGHT + 30 });
+            }
+        });
+
+        return Array.from(genRows.entries())
+            .sort(([a], [b]) => a - b)
+            .map(([gen, bounds]) => ({
+                gen,
+                y: bounds.minY - 20,
+                height: bounds.maxY - bounds.minY + 40,
+            }));
+    }, [generations, positions, persons]);
+
     // Calculate connections — clean straight lines, triangle-aware endpoints
     const connections = useMemo(() => {
         const connLines: Array<{ id: string; d: string; color: string; type: 'spouse' | 'parent-child' | 'vertical-drop' | 'marriage-dot' }> = [];
         const drawnPairs = new Set<string>();
 
-        const THEME_TEAL = '#0d9488'; // Teal-600 for all connections
+        const COLOR_PARENT_CHILD = '#0d9488'; // Teal-600 for parent-child
+        const COLOR_SPOUSE = '#ec4899';        // Pink-500 for spouse connections
 
         // Triangle geometry (viewBox 0 0 56 56, points: "28,50 4,10 52,10")
         const TRI_TOP = 10;   // Top edge Y in 56px shape
@@ -356,7 +396,7 @@ export function FamilyTree({
                 connLines.push({
                     id: `spouse-${key}`,
                     d: `M ${x1} ${y1} L ${x2} ${y2}`,
-                    color: THEME_TEAL,
+                    color: COLOR_SPOUSE,
                     type: 'spouse'
                 });
 
@@ -434,7 +474,7 @@ export function FamilyTree({
                 connLines.push({
                     id: `child-curve-${childId}`,
                     d: `M ${dropX} ${dropY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${childCenterX} ${childTopY}`,
-                    color: THEME_TEAL,
+                    color: COLOR_PARENT_CHILD,
                     type: 'parent-child'
                 });
             });
@@ -1048,7 +1088,7 @@ export function FamilyTree({
             <div className="fixed bottom-44 right-4 z-30 text-xs bg-white/90 px-3 py-2 rounded-lg shadow border border-stone-200 print:hidden">
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1">
-                        <div className="w-4 h-0.5 bg-teal-500"></div>
+                        <div className="w-4 h-0.5 bg-pink-500" style={{ borderTop: '2px dashed #ec4899' }}></div>
                         <span className="text-stone-500">Pasangan</span>
                     </div>
                     <div className="flex items-center gap-1">
@@ -1088,6 +1128,27 @@ export function FamilyTree({
                         backgroundSize: '24px 24px'
                     }}
                 >
+                    {/* Generation Background Bands */}
+                    {generationBands.map((band) => (
+                        <div
+                            key={`gen-band-${band.gen}`}
+                            className="absolute left-0 right-0 pointer-events-none"
+                            style={{
+                                top: band.y,
+                                height: band.height,
+                                backgroundColor: GENERATION_BAND_COLORS[(band.gen - 1) % GENERATION_BAND_COLORS.length],
+                                borderTop: '1px solid rgba(0,0,0,0.04)',
+                                borderBottom: '1px solid rgba(0,0,0,0.04)',
+                            }}
+                        >
+                            {zoom > 0.3 && (
+                                <div className="absolute left-2 top-1 text-[10px] font-medium text-stone-400/60 select-none">
+                                    Gen {band.gen}
+                                </div>
+                            )}
+                        </div>
+                    ))}
+
                     {/* SVG Connectors */}
                     <svg className="absolute inset-0 pointer-events-none" width={canvasSize.width} height={canvasSize.height}>
                         {connections.map(conn => (
@@ -1097,12 +1158,13 @@ export function FamilyTree({
                                 fill={conn.type === 'marriage-dot' ? conn.color : 'none'}
                                 stroke={conn.type === 'marriage-dot' ? 'none' : conn.color}
                                 strokeWidth={
-                                    conn.type === 'spouse' ? 2.5 :
+                                    conn.type === 'spouse' ? 2 :
                                         conn.type === 'vertical-drop' ? 2 : 1.8
                                 }
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
-                                opacity={conn.type === 'marriage-dot' ? 0.9 : 0.7}
+                                strokeDasharray={conn.type === 'spouse' ? '6,4' : undefined}
+                                opacity={conn.type === 'marriage-dot' ? 0.9 : 0.65}
                             />
                         ))}
                     </svg>
@@ -1197,20 +1259,27 @@ export function FamilyTree({
                                         </div>
                                     )}
 
-                                    {/* Name below shape */}
-                                    <div className="text-center w-full px-1">
-                                        {(scriptMode === 'latin' || scriptMode === 'both') && (
-                                            <div className={`font-medium leading-tight text-stone-700 ${displayName.length > 25 ? 'text-[10px]' : displayName.length > 15 ? 'text-xs' : 'text-xs'
-                                                }`}>
-                                                {displayName}
-                                            </div>
-                                        )}
-                                        {(scriptMode === 'lontara' || scriptMode === 'both') && lontaraFullName && (
-                                            <div className="text-teal-700 font-lontara leading-tight text-[11px] mt-0.5">
-                                                {lontaraFullName}
-                                            </div>
-                                        )}
-                                    </div>
+                                    {/* Name below shape — LOD based on zoom */}
+                                    {zoom > 0.25 && (
+                                        <div className="text-center w-full px-1">
+                                            {(scriptMode === 'latin' || scriptMode === 'both') && (
+                                                <div className={`font-medium leading-tight text-stone-700 ${zoom < 0.5
+                                                        ? 'text-[10px] truncate'
+                                                        : displayName.length > 25 ? 'text-[10px]' : 'text-xs'
+                                                    }`}>
+                                                    {zoom < 0.5
+                                                        ? (person.firstName || displayName.split(' ')[0])
+                                                        : displayName
+                                                    }
+                                                </div>
+                                            )}
+                                            {zoom > 0.5 && (scriptMode === 'lontara' || scriptMode === 'both') && lontaraFullName && (
+                                                <div className="text-teal-700 font-lontara leading-tight text-[11px] mt-0.5">
+                                                    {lontaraFullName}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         );
