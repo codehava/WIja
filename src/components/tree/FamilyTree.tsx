@@ -569,8 +569,8 @@ export function FamilyTree({
 
             // Only auto-fit if tree is larger than viewport
             if (fitZoom < 0.9) {
-                // Use a slightly lower zoom to leave some margin
-                const targetZoom = Math.max(fitZoom * 0.95, 0.1);
+                // Use a slightly lower zoom to leave some margin, but keep minimum visible
+                const targetZoom = Math.max(fitZoom * 0.95, 0.2); // Min 20% for readability
                 setZoom(targetZoom);
 
                 // Center the tree
@@ -715,8 +715,8 @@ export function FamilyTree({
     }, [persons]);
 
     // Zoom controls - extended range for large trees
-    const handleZoomIn = () => setZoom(z => Math.min(z + 0.15, 3)); // Up to 300% for details
-    const handleZoomOut = () => setZoom(z => Math.max(z - 0.15, 0.05)); // Down to 5% for overview
+    const handleZoomIn = () => setZoom(z => Math.min(z + 0.15, 3));
+    const handleZoomOut = () => setZoom(z => Math.max(z - 0.15, 0.1)); // Min 10% for visibility
     const handleZoomReset = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
 
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -787,7 +787,7 @@ export function FamilyTree({
         const zoomX = containerWidth / canvasSize.width;
         const zoomY = containerHeight / canvasSize.height;
         const fitZoom = Math.min(zoomX, zoomY, 1) * 0.95;
-        const targetZoom = Math.max(fitZoom, 0.05);
+        const targetZoom = Math.max(fitZoom, 0.15); // Min 15% for readability
 
         setZoom(targetZoom);
 
@@ -1385,7 +1385,7 @@ export function FamilyTree({
                                     )}
 
                                     {/* Name below shape — LOD based on zoom */}
-                                    {zoom > 0.25 && (
+                                    {zoom > 0.12 && (
                                         <div className="text-center w-full px-1">
                                             {(scriptMode === 'latin' || scriptMode === 'both') && (
                                                 <div className={`font-medium leading-tight text-stone-700 ${zoom < 0.5
