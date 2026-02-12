@@ -390,29 +390,21 @@ export function FamilyTree({
 
                 const y1 = getShapeCenter(leftPos, leftId);
                 const y2 = getShapeCenter(rightPos, rightId);
-                // For spouse line endpoints, we need the edge of each shape
-                // Circle: center ± SHAPE_SIZE/2
-                // Triangle: for the left-pointing edge we use the triangle's actual width at the center height
+
+                // For spouse line endpoints, compute the actual shape edge at center-Y
+                // Triangle viewBox: 56x56, points: (28,50) (4,10) (52,10)
+                // At center Y=30: left edge x=16, right edge x=40 → half-width from center = 12px
+                const TRI_HALF_WIDTH_AT_CENTER = 12;
                 const leftPerson = personsMap.get(leftId);
                 const rightPerson = personsMap.get(rightId);
 
-                // Get the right edge X of the left person's shape
-                let x1: number;
-                if (leftPerson?.gender === 'female') {
-                    // Triangle points: top-left(4,10) top-right(52,10) bottom(28,50)
-                    // At center Y the triangle is about 40px wide from center
-                    x1 = leftPos.x + NODE_WIDTH / 2 + SHAPE_SIZE / 2;
-                } else {
-                    x1 = leftPos.x + NODE_WIDTH / 2 + SHAPE_SIZE / 2 + 2;
-                }
+                // Right edge of the left person's shape
+                const leftHalfW = leftPerson?.gender === 'female' ? TRI_HALF_WIDTH_AT_CENTER : SHAPE_SIZE / 2;
+                const x1 = leftPos.x + NODE_WIDTH / 2 + leftHalfW + 2;
 
-                // Get the left edge X of the right person's shape  
-                let x2: number;
-                if (rightPerson?.gender === 'female') {
-                    x2 = rightPos.x + NODE_WIDTH / 2 - SHAPE_SIZE / 2;
-                } else {
-                    x2 = rightPos.x + NODE_WIDTH / 2 - SHAPE_SIZE / 2 - 2;
-                }
+                // Left edge of the right person's shape
+                const rightHalfW = rightPerson?.gender === 'female' ? TRI_HALF_WIDTH_AT_CENTER : SHAPE_SIZE / 2;
+                const x2 = rightPos.x + NODE_WIDTH / 2 - rightHalfW - 2;
 
                 connLines.push({
                     id: `spouse-${key}`,
@@ -424,8 +416,17 @@ export function FamilyTree({
                 // Store couple drop point (midpoint, below both shapes)
                 const coupleKey = [person.personId, spouseId].sort().join('-');
                 const midX = (x1 + x2) / 2;
+                const midY = (y1 + y2) / 2;
                 const bottomY = Math.max(getShapeBottom(leftPos, leftId), getShapeBottom(rightPos, rightId));
                 coupleDropPoints.set(coupleKey, { x: midX, y: bottomY });
+
+                // Vertical stem: from spouse midpoint down to couple drop point
+                connLines.push({
+                    id: `stem-${coupleKey}`,
+                    d: `M ${midX} ${midY} L ${midX} ${bottomY}`,
+                    color: COLOR_PARENT_CHILD,
+                    type: 'vertical-drop'
+                });
             });
         });
 
