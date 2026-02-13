@@ -426,8 +426,53 @@ function FamilyTreeInner({
                 }
             });
             positionsRef.current = newPosMap;
+
+            // Recalculate junction positions when spouse nodes are dragged
+            const draggedPersonIds = posChanges
+                .filter(c => c.position && !c.id.startsWith('junction-'))
+                .map(c => c.id);
+
+            if (draggedPersonIds.length > 0) {
+                setNodes(prevNodes => {
+                    const nodeMap = new Map(prevNodes.map(n => [n.id, n]));
+                    let changed = false;
+
+                    draggedPersonIds.forEach(personId => {
+                        const person = personsMap.get(personId);
+                        if (!person) return;
+
+                        person.relationships.spouseIds.forEach(spouseId => {
+                            const coupleKey = [personId, spouseId].sort().join('-');
+                            const junctionId = `junction-${coupleKey}`;
+                            const junctionNode = nodeMap.get(junctionId);
+                            if (!junctionNode) return;
+
+                            // Get current positions of both spouses from the live node positions
+                            const personNode = nodeMap.get(personId);
+                            const spouseNode = nodeMap.get(spouseId);
+                            if (!personNode || !spouseNode) return;
+
+                            const pos1 = personNode.position;
+                            const pos2 = spouseNode.position;
+
+                            const midX = (pos1.x + pos2.x + NODE_WIDTH) / 2;
+                            const midY = Math.min(pos1.y, pos2.y) + adaptiveSizes.shapeSize / 2;
+
+                            if (junctionNode.position.x !== midX || junctionNode.position.y !== midY) {
+                                nodeMap.set(junctionId, {
+                                    ...junctionNode,
+                                    position: { x: midX, y: midY },
+                                });
+                                changed = true;
+                            }
+                        });
+                    });
+
+                    return changed ? Array.from(nodeMap.values()) : prevNodes;
+                });
+            }
         }
-    }, [onNodesChange]);
+    }, [onNodesChange, personsMap, adaptiveSizes, setNodes]);
 
     // Save positions after drag ends
     const handleNodeDragStop = useCallback((_event: React.MouseEvent, node: Node) => {
