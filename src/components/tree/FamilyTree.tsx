@@ -225,10 +225,8 @@ function FamilyTreeInner({
         });
 
         // ── Build spouse edges + junction nodes ──
-        // For each couple, create:
-        //   1. Straight line from left spouse → junction
-        //   2. Straight line from junction → right spouse
-        //   3. Junction node at midpoint (children connect from here)
+        // Single Bezier curve from husband to wife.
+        // Junction node only used as invisible anchor for child edges.
         persons.forEach(person => {
             person.relationships.spouseIds.forEach(spouseId => {
                 const coupleKey = [person.personId, spouseId].sort().join('-');
@@ -245,10 +243,21 @@ function FamilyTreeInner({
                 const leftPos = pos1.x < pos2.x ? pos1 : pos2;
                 const rightPos = pos1.x < pos2.x ? pos2 : pos1;
 
-                // Create junction node at midpoint, at the shape center height
+                // Single Bezier curve: left spouse → right spouse
+                rfEdges.push({
+                    id: `spouse-${coupleKey}`,
+                    source: leftId,
+                    target: rightId,
+                    sourceHandle: 'right',
+                    targetHandle: 'left',
+                    type: 'default', // Bezier curve — one smooth unbroken line
+                    style: { stroke: '#ec4899', strokeWidth: 2 },
+                });
+
+                // Invisible junction node at midpoint (only for child edge routing)
                 const junctionId = `junction-${coupleKey}`;
-                const midX = (leftPos.x + rightPos.x + NODE_WIDTH) / 2; // center between spouses
-                const midY = leftPos.y + currentAdaptiveSizes.shapeSize / 2; // at shape center height
+                const midX = (leftPos.x + rightPos.x + NODE_WIDTH) / 2;
+                const midY = leftPos.y + currentAdaptiveSizes.shapeSize / 2;
 
                 rfNodes.push({
                     id: junctionId,
@@ -259,28 +268,6 @@ function FamilyTreeInner({
                     selectable: false,
                 });
                 coupleJunctions.set(coupleKey, junctionId);
-
-                // Edge: left spouse → junction (straight line)
-                rfEdges.push({
-                    id: `spouse-left-${coupleKey}`,
-                    source: leftId,
-                    target: junctionId,
-                    sourceHandle: 'right',
-                    targetHandle: 'left',
-                    type: 'straight',
-                    style: { stroke: '#ec4899', strokeWidth: 2 },
-                });
-
-                // Edge: junction → right spouse (straight line)
-                rfEdges.push({
-                    id: `spouse-right-${coupleKey}`,
-                    source: junctionId,
-                    target: rightId,
-                    sourceHandle: 'right',
-                    targetHandle: 'left',
-                    type: 'straight',
-                    style: { stroke: '#ec4899', strokeWidth: 2 },
-                });
             });
         });
 
