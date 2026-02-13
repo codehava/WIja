@@ -30,6 +30,7 @@ import { findRootAncestor, calculateAllGenerations } from '@/lib/generation/calc
 import { TreeSearch } from './TreeSearch';
 import { MaleNode } from './nodes/MaleNode';
 import { FemaleNode } from './nodes/FemaleNode';
+import { JunctionNode } from './nodes/JunctionNode';
 import { calculateTreeLayout, calculateSimplePosition, ViewportInfo } from '@/lib/layout/treeLayout';
 
 export interface FamilyTreeProps {
@@ -49,6 +50,7 @@ export interface FamilyTreeProps {
 // Layout constants
 const NODE_WIDTH = 140;
 const NODE_HEIGHT = 100;
+const SHAPE_HEIGHT = 56; // Height of the shape area (circle/triangle)
 
 // Adaptive sizing
 function getAdaptiveSizes(personCount: number) {
@@ -61,6 +63,7 @@ function getAdaptiveSizes(personCount: number) {
 const nodeTypes = {
     male: MaleNode,
     female: FemaleNode,
+    junction: JunctionNode,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -176,8 +179,10 @@ function FamilyTreeInner({
         const rfNodes: Node[] = [];
         const rfEdges: Edge[] = [];
         const drawnPairs = new Set<string>();
+        // Map: "parentId1-parentId2" (sorted) → junction node ID
+        const coupleJunctions = new Map<string, string>();
 
-        // Build nodes
+        // Build person nodes
         persons.forEach(person => {
             const pos = posMap.get(person.personId);
             if (!pos) return;
@@ -219,72 +224,120 @@ function FamilyTreeInner({
             });
         });
 
-        // Build spouse edges
+        // ── Build spouse edges + junction nodes ──
+        // For each couple, create:
+        //   1. Straight line from left spouse → junction
+        //   2. Straight line from junction → right spouse
+        //   3. Junction node at midpoint (children connect from here)
         persons.forEach(person => {
             person.relationships.spouseIds.forEach(spouseId => {
-                const key = [person.personId, spouseId].sort().join('-spouse-');
-                if (drawnPairs.has(key)) return;
-                drawnPairs.add(key);
+                const coupleKey = [person.personId, spouseId].sort().join('-');
+                if (drawnPairs.has(coupleKey)) return;
+                drawnPairs.add(coupleKey);
 
-                if (!posMap.has(spouseId)) return;
+                const pos1 = posMap.get(person.personId);
+                const pos2 = posMap.get(spouseId);
+                if (!pos1 || !pos2) return;
 
-                const pos1 = posMap.get(person.personId)!;
-                const pos2 = posMap.get(spouseId)!;
-
-                // Determine left/right based on position
+                // Determine left/right
                 const leftId = pos1.x < pos2.x ? person.personId : spouseId;
                 const rightId = pos1.x < pos2.x ? spouseId : person.personId;
+                const leftPos = pos1.x < pos2.x ? pos1 : pos2;
+                const rightPos = pos1.x < pos2.x ? pos2 : pos1;
 
+                // Create junction node at midpoint, at the shape center height
+                const junctionId = `junction-${coupleKey}`;
+                const midX = (leftPos.x + rightPos.x + NODE_WIDTH) / 2 - 4; // center, offset by half junction width
+                const midY = leftPos.y + currentAdaptiveSizes.shapeSize / 2 - 4; // at shape center height
+
+                rfNodes.push({
+                    id: junctionId,
+                    type: 'junction',
+                    position: { x: midX, y: midY },
+                    data: { label: '' },
+                    draggable: false,
+                    selectable: false,
+                });
+                coupleJunctions.set(coupleKey, junctionId);
+
+                // Edge: left spouse → junction (straight line)
                 rfEdges.push({
-                    id: `spouse-${key}`,
+                    id: `spouse-left-${coupleKey}`,
                     source: leftId,
+                    target: junctionId,
+                    sourceHandle: 'right',
+                    targetHandle: 'left',
+                    type: 'straight',
+                    style: { stroke: '#ec4899', strokeWidth: 2 },
+                });
+
+                // Edge: junction → right spouse (straight line)
+                rfEdges.push({
+                    id: `spouse-right-${coupleKey}`,
+                    source: junctionId,
                     target: rightId,
                     sourceHandle: 'right',
                     targetHandle: 'left',
-                    type: 'default', // Bezier curve
-                    style: {
-                        stroke: '#ec4899',
-                        strokeWidth: 2,
-                    },
-                    animated: false,
+                    type: 'straight',
+                    style: { stroke: '#ec4899', strokeWidth: 2 },
                 });
             });
         });
 
-        // Build parent-child edges (Bezier curves)
+        // ── Build parent-child edges ──
+        // Children connect FROM the couple's junction node (not from individual parents)
         persons.forEach(person => {
-            if (person.relationships.parentIds.length > 0) {
-                // Connect from each parent to this child
-                person.relationships.parentIds.forEach(parentId => {
-                    if (!posMap.has(parentId)) return;
+            if (person.relationships.parentIds.length === 0) return;
 
-                    const edgeKey = `child-${parentId}-${person.personId}`;
-                    if (drawnPairs.has(edgeKey)) return;
-                    drawnPairs.add(edgeKey);
+            const parentIds = person.relationships.parentIds.filter(pid => posMap.has(pid));
+            if (parentIds.length === 0) return;
 
-                    // Check if this connection is on ancestry path
-                    const isOnPath = currentAncestryPath.size > 0 &&
-                        currentAncestryPath.has(person.personId) &&
-                        currentAncestryPath.has(parentId);
+            const childEdgeKey = `child-to-${person.personId}`;
+            if (drawnPairs.has(childEdgeKey)) return;
+            drawnPairs.add(childEdgeKey);
 
+            // Check ancestry path
+            const isOnPath = currentAncestryPath.size > 0 &&
+                currentAncestryPath.has(person.personId) &&
+                parentIds.some(pid => currentAncestryPath.has(pid));
+
+            const edgeStyle = {
+                stroke: isOnPath ? '#f59e0b' : '#0d9488',
+                strokeWidth: isOnPath ? 3 : 1.8,
+                opacity: currentAncestryPath.size > 0 ? (isOnPath ? 1 : 0.25) : 0.65,
+            };
+
+            // If child has 2 parents that form a couple, connect from junction
+            if (parentIds.length >= 2) {
+                const coupleKey = [parentIds[0], parentIds[1]].sort().join('-');
+                const junctionId = coupleJunctions.get(coupleKey);
+
+                if (junctionId) {
+                    // Connect: junction → child (Bezier curve)
                     rfEdges.push({
-                        id: edgeKey,
-                        source: parentId,
+                        id: `child-${coupleKey}-${person.personId}`,
+                        source: junctionId,
                         target: person.personId,
                         sourceHandle: 'bottom',
                         targetHandle: 'top',
-                        type: 'default', // Bezier curve — smooth and always attached to handles!
-                        style: {
-                            stroke: isOnPath ? '#f59e0b' : '#0d9488',
-                            strokeWidth: isOnPath ? 3 : 1.8,
-                            opacity: currentAncestryPath.size > 0
-                                ? (isOnPath ? 1 : 0.25)
-                                : 0.65,
-                        },
-                        animated: false,
+                        type: 'default', // Bezier curve
+                        style: edgeStyle,
                     });
-                });
+                    return;
+                }
             }
+
+            // Fallback: single parent → child directly
+            const parentId = parentIds[0];
+            rfEdges.push({
+                id: `child-${parentId}-${person.personId}`,
+                source: parentId,
+                target: person.personId,
+                sourceHandle: 'bottom',
+                targetHandle: 'top',
+                type: 'default',
+                style: edgeStyle,
+            });
         });
 
         return { rfNodes, rfEdges };

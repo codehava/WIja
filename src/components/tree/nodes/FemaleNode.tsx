@@ -53,56 +53,73 @@ function FemaleNodeComponent({ data }: NodeProps) {
                 style={{ background: 'transparent', border: 'none', width: 1, height: 1, top: 0 }}
             />
 
-            {/* Triangle Shape */}
-            <div className="relative" style={{ width: shapeSize, height: shapeSize }}>
-                <svg width={shapeSize} height={shapeSize} viewBox="0 0 56 56" className="drop-shadow-lg">
-                    <defs>
-                        <clipPath id={`tri-${d.person.personId}`}>
-                            <polygon points="28,50 4,10 52,10" />
-                        </clipPath>
-                        <linearGradient id={`grad-f-${d.person.personId}`} x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#f9a8d4" />
-                            <stop offset="100%" stopColor="#ec4899" />
-                        </linearGradient>
-                    </defs>
-                    {d.person.photoUrl ? (
-                        <image
-                            href={d.person.photoUrl}
-                            x="0" y="0" width="56" height="56"
-                            clipPath={`url(#tri-${d.person.personId})`}
-                            preserveAspectRatio="xMidYMid slice"
-                        />
-                    ) : (
+            {/* Shape wrapper — spouse handles attach HERE so lines connect to the triangle */}
+            <div className="relative">
+                {/* Triangle Shape */}
+                <div style={{ width: shapeSize, height: shapeSize }}>
+                    <svg width={shapeSize} height={shapeSize} viewBox="0 0 56 56" className="drop-shadow-lg">
+                        <defs>
+                            <clipPath id={`tri-${d.person.personId}`}>
+                                <polygon points="28,50 4,10 52,10" />
+                            </clipPath>
+                            <linearGradient id={`grad-f-${d.person.personId}`} x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#f9a8d4" />
+                                <stop offset="100%" stopColor="#ec4899" />
+                            </linearGradient>
+                        </defs>
+                        {d.person.photoUrl ? (
+                            <image
+                                href={d.person.photoUrl}
+                                x="0" y="0" width="56" height="56"
+                                clipPath={`url(#tri-${d.person.personId})`}
+                                preserveAspectRatio="xMidYMid slice"
+                            />
+                        ) : (
+                            <polygon
+                                points="28,50 4,10 52,10"
+                                fill={`url(#grad-f-${d.person.personId})`}
+                            />
+                        )}
                         <polygon
                             points="28,50 4,10 52,10"
-                            fill={`url(#grad-f-${d.person.personId})`}
+                            fill="none"
+                            stroke={
+                                d.isOnAncestryPath ? '#f59e0b' :
+                                    d.isSelected ? '#14b8a6' :
+                                        d.isHighlighted ? '#f59e0b' : '#db2777'
+                            }
+                            strokeWidth={d.isOnAncestryPath || d.isSelected || d.isHighlighted ? 3 : 2}
+                            strokeLinejoin="round"
                         />
-                    )}
-                    <polygon
-                        points="28,50 4,10 52,10"
-                        fill="none"
-                        stroke={
-                            d.isOnAncestryPath ? '#f59e0b' :
-                                d.isSelected ? '#14b8a6' :
-                                    d.isHighlighted ? '#f59e0b' : '#db2777'
-                        }
-                        strokeWidth={d.isOnAncestryPath || d.isSelected || d.isHighlighted ? 3 : 2}
-                        strokeLinejoin="round"
-                    />
-                </svg>
+                    </svg>
+                </div>
+
+                {/* Spouse handles — positioned at shape center height */}
+                <Handle
+                    type="source"
+                    position={Position.Right}
+                    id="right"
+                    style={{ background: 'transparent', border: 'none', width: 1, height: 1, top: '50%', right: -1 }}
+                />
+                <Handle
+                    type="target"
+                    position={Position.Left}
+                    id="left"
+                    style={{ background: 'transparent', border: 'none', width: 1, height: 1, top: '50%', left: -1 }}
+                />
             </div>
 
-            {/* Name below shape */}
+            {/* Text below shape — Lontara FIRST, then Latin */}
             <div className="text-center w-full px-1" style={{ maxWidth: 140 }}>
+                {(d.scriptMode === 'lontara' || d.scriptMode === 'both') && d.lontaraFullName && (
+                    <div className="text-teal-700 font-lontara leading-tight text-[11px]">
+                        {d.lontaraFullName}
+                    </div>
+                )}
                 {(d.scriptMode === 'latin' || d.scriptMode === 'both') && (
                     <div className={`font-medium leading-tight text-stone-700 ${d.displayName.length > 25 ? 'text-[10px]' : 'text-xs'
                         }`}>
                         {d.displayName}
-                    </div>
-                )}
-                {(d.scriptMode === 'lontara' || d.scriptMode === 'both') && d.lontaraFullName && (
-                    <div className="text-teal-700 font-lontara leading-tight text-[11px] mt-0.5">
-                        {d.lontaraFullName}
                     </div>
                 )}
             </div>
@@ -113,22 +130,6 @@ function FemaleNodeComponent({ data }: NodeProps) {
                 position={Position.Bottom}
                 id="bottom"
                 style={{ background: 'transparent', border: 'none', width: 1, height: 1, bottom: 0 }}
-            />
-
-            {/* Handle: right side */}
-            <Handle
-                type="source"
-                position={Position.Right}
-                id="right"
-                style={{ background: 'transparent', border: 'none', width: 1, height: 1 }}
-            />
-
-            {/* Handle: left side */}
-            <Handle
-                type="target"
-                position={Position.Left}
-                id="left"
-                style={{ background: 'transparent', border: 'none', width: 1, height: 1 }}
             />
         </div>
     );
