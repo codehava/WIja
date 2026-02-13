@@ -257,7 +257,7 @@ function FamilyTreeInner({
                 // Invisible junction node at midpoint (only for child edge routing)
                 const junctionId = `junction-${coupleKey}`;
                 const midX = (leftPos.x + rightPos.x + NODE_WIDTH) / 2;
-                const midY = leftPos.y + currentAdaptiveSizes.shapeSize / 2;
+                const midY = (leftPos.y + rightPos.y) / 2 + currentAdaptiveSizes.shapeSize / 2;
 
                 rfNodes.push({
                     id: junctionId,
@@ -452,11 +452,16 @@ function FamilyTreeInner({
                             const spouseNode = nodeMap.get(spouseId);
                             if (!personNode || !spouseNode) return;
 
-                            const pos1 = personNode.position;
-                            const pos2 = spouseNode.position;
+                            // Determine left/right consistently (same as initial layout)
+                            const p1 = personNode.position;
+                            const p2 = spouseNode.position;
+                            const leftPos = p1.x < p2.x ? p1 : p2;
+                            const rightPos = p1.x < p2.x ? p2 : p1;
 
-                            const midX = (pos1.x + pos2.x + NODE_WIDTH) / 2;
-                            const midY = Math.min(pos1.y, pos2.y) + adaptiveSizes.shapeSize / 2;
+                            // Midpoint between right-handle of left spouse and left-handle of right spouse
+                            const midX = (leftPos.x + rightPos.x + NODE_WIDTH) / 2;
+                            // Stay at vertical midpoint of both spouses (follows the Bezier curve center)
+                            const midY = (leftPos.y + rightPos.y) / 2 + adaptiveSizes.shapeSize / 2;
 
                             if (junctionNode.position.x !== midX || junctionNode.position.y !== midY) {
                                 nodeMap.set(junctionId, {
